@@ -51,7 +51,12 @@ const uint16_t 	  lowBatteryPeriod = 30;
 volatile uint16_t gPowerSave_10ms;
 
 
-const uint16_t Voltage2PercentageTable[][7][2] = {
+struct __attribute__((__packed__)) v2p {
+	uint16_t v;
+	uint8_t p;
+};
+
+const struct v2p Voltage2PercentageTable[][7] = {
 	[BATTERY_TYPE_1600_MAH] = {
 		{828, 100},
 		{814, 97 },
@@ -79,18 +84,31 @@ static_assert(ARRAY_SIZE(Voltage2PercentageTable[BATTERY_TYPE_1600_MAH]) ==
 
 unsigned int BATTERY_VoltsToPercent(const unsigned int voltage_10mV)
 {
-	const uint16_t (*crv)[2] = Voltage2PercentageTable[gEeprom.BATTERY_TYPE];
-	const int mulipl = 1000;
+	const struct v2p *v2p = Voltage2PercentageTable[gEeprom.BATTERY_TYPE];
 	for (unsigned int i = 1; i < ARRAY_SIZE(Voltage2PercentageTable[BATTERY_TYPE_2200_MAH]); i++) {
-		if (voltage_10mV > crv[i][0]) {
-			const int a = (crv[i - 1][1] - crv[i][1]) * mulipl / (crv[i - 1][0] - crv[i][0]);
-			const int b = crv[i][1] - a * crv[i][0] / mulipl;
-			const int p = a * voltage_10mV / mulipl + b;
+		if (voltage_10mV > v2p[i].v) {
+			const int a = ((v2p[i - 1].p - v2p[i].p) << 10) / (v2p[i - 1].v - v2p[i].v);
+			const int b = v2p[i].p - ((a * v2p[i].v) >> 10);
+			const int p = ((a * voltage_10mV) >> 10) + b;
 			return MIN(p, 100);
 		}
 	}
 
 	return 0;
+}
+
+unsigned int BATTERY_PercentMonotonic(unsigned int percent)
+{
+	static uint8_t prev = 101;
+
+	if (gChargingWithTypeC) {
+		if (percent > prev)
+			prev = percent;
+	} else {
+		if (percent < prev)
+			prev = percent;
+	}
+	return prev;
 }
 
 void BATTERY_GetReadings(const bool bDisplayBatteryLevel)
@@ -107,7 +125,7 @@ void BATTERY_GetReadings(const bool bDisplayBatteryLevel)
 	else {
 		gBatteryDisplayLevel = 1;
 		const uint8_t levels[] = {5,17,41,65,88};
-		uint8_t perc = BATTERY_VoltsToPercent(gBatteryVoltageAverage);
+		uint8_t perc = BATTERY_PercentMonotonic(BATTERY_VoltsToPercent(gBatteryVoltageAverage));
 		for(uint8_t i = 6; i >= 1; i--){
 			if (perc > levels[i-2]) {
 				gBatteryDisplayLevel = i;

@@ -1196,7 +1196,7 @@ static void NextScanStep() {
 static void UpdateScan() {
   Scan();
 
-  if (scanInfo.i < scanInfo.measurementsCount) {
+  if (scanInfo.i < scanInfo.measurementsCount - 1) {
     NextScanStep();
     return;
   }

@@ -4,12 +4,12 @@
 # 1 = enable
 
 # ---- STOCK QUANSHENG FERATURES ----
-ENABLE_FMRADIO                	?= 1
+ENABLE_FMRADIO                	?= 0
 ENABLE_UART                   	?= 1
-ENABLE_AIRCOPY                	?= 0
+ENABLE_AIRCOPY                	?= 1
 ENABLE_NOAA                   	?= 0
 ENABLE_VOICE                  	?= 0
-ENABLE_VOX                    	?= 0
+ENABLE_VOX                    	?= 1
 ENABLE_ALARM                  	?= 0
 ENABLE_TX1750                 	?= 1
 ENABLE_PWRON_PASSWORD         	?= 0
@@ -34,8 +34,8 @@ ENABLE_AM_FIX                 	?= 1
 ENABLE_SQUELCH_MORE_SENSITIVE 	?= 1
 ENABLE_FASTER_CHANNEL_SCAN    	?= 1
 ENABLE_RSSI_BAR               	?= 1
-ENABLE_AUDIO_BAR              	?= 0
-ENABLE_COPY_CHAN_TO_VFO       	?= 0
+ENABLE_AUDIO_BAR              	?= 1
+ENABLE_COPY_CHAN_TO_VFO       	?= 1
 ENABLE_REDUCE_LOW_MID_TX_POWER	?= 0
 ENABLE_BYP_RAW_DEMODULATORS   	?= 0
 ENABLE_BLMIN_TMP_OFF          	?= 0
@@ -43,10 +43,10 @@ ENABLE_SCAN_RANGES            	?= 1
 ENABLE_FEAT_F4HWN             	?= 1
 ENABLE_FEAT_F4HWN_SCREENSHOT  	?= 0
 ENABLE_FEAT_F4HWN_SPECTRUM    	?= 1
-ENABLE_FEAT_F4HWN_RX_TX_TIMER   ?= 0
+ENABLE_FEAT_F4HWN_RX_TX_TIMER   ?= 1
 ENABLE_FEAT_F4HWN_CHARGING_C    ?= 1
 ENABLE_FEAT_F4HWN_SLEEP			?= 1
-ENABLE_FEAT_F4HWN_PMR         	?= 1
+ENABLE_FEAT_F4HWN_PMR         	?= 0
 ENABLE_FEAT_F4HWN_GMRS_FRS_MURS	?= 0
 ENABLE_FEAT_F4HWN_CA         	?= 1
 

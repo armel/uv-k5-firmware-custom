@@ -4,7 +4,7 @@
 IMAGE_NAME="uvk5"
 DEST_DIR="compiled-firmware/"
 LOCL_DIR="${PWD}/${DEST_DIR}/"
-ALWAYSIN="ENABLE_NOAA=0 NABLE_UART=1"
+ALWAYSIN="ENABLE_NOAA=0 ENABLE_UART=1"
 
 rm -f "${LOCL_DIR}/*"
 docker build -t $IMAGE_NAME .

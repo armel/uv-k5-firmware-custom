@@ -333,8 +333,8 @@ void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     action_opt_table[funcShort]();
 }
 
-
 #ifdef ENABLE_FMRADIO
+
 void ACTION_FM(void)
 {
     if (gCurrentFunction != FUNCTION_TRANSMIT && gCurrentFunction != FUNCTION_MONITOR)
@@ -405,8 +405,8 @@ static void ACTION_Scan_FM(bool bRestart)
 
 #endif
 
-
 #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
+
 static void ACTION_AlarmOr1750(const bool b1750)
 {
 
@@ -435,10 +435,10 @@ static void ACTION_AlarmOr1750(const bool b1750)
         gRequestDisplayScreen = DISPLAY_MAIN;
 }
 
-
 #endif
 
 #ifdef ENABLE_VOX
+
 void ACTION_Vox(void)
 {
     gEeprom.VOX_SWITCH   = !gEeprom.VOX_SWITCH;
@@ -450,9 +450,11 @@ void ACTION_Vox(void)
         gAnotherVoiceID  = VOICE_ID_VOX;
     #endif
 }
+
 #endif
 
 #ifdef ENABLE_BLMIN_TMP_OFF
+
 void ACTION_BlminTmpOff(void)
 {
     if(++gEeprom.BACKLIGHT_MIN_STAT == BLMIN_STAT_UNKNOWN) {
@@ -462,57 +464,16 @@ void ACTION_BlminTmpOff(void)
         BACKLIGHT_SetBrightness(0);
     }
 }
+
 #endif
 
-#ifdef ENABLE_FEAT_F4HWN
+#ifdef ENABLE_FEAT_F4HWN 
+
 void ACTION_Update(void)
 {
     gSaveRxMode          = false;
     gFlagReconfigureVfos = true;
     gUpdateStatus        = true;
-}
-
-void ACTION_RxMode(void)
-{
-    static bool cycle = 0;
-
-    switch(cycle) {
-        case 0:
-            gEeprom.DUAL_WATCH = !gEeprom.DUAL_WATCH;
-            cycle = 1;
-            break;
-        case 1:
-            gEeprom.CROSS_BAND_RX_TX = !gEeprom.CROSS_BAND_RX_TX;
-            cycle = 0;
-            break;
-    }
-
-    ACTION_Update();
-}
-
-void ACTION_MainOnly(void)
-{
-    static bool cycle = 0;
-    static uint8_t dw = 0;
-    static uint8_t cb = 0;
-
-    switch(cycle) {
-        case 0:
-            dw = gEeprom.DUAL_WATCH;
-            cb = gEeprom.CROSS_BAND_RX_TX;
-
-            gEeprom.DUAL_WATCH = 0;
-            gEeprom.CROSS_BAND_RX_TX = 0;
-            cycle = 1;
-            break;
-        case 1:
-            gEeprom.DUAL_WATCH = dw;
-            gEeprom.CROSS_BAND_RX_TX = cb;
-            cycle = 0;
-            break;
-    }
-
-    ACTION_Update();
 }
 
 void ACTION_Ptt(void)
@@ -573,5 +534,68 @@ void ACTION_BackLightOnDemand(void)
     }
     
     BACKLIGHT_TurnOn();
+}
+
+/******************************************************************************/
+/* Copyright 2024 Roberto A. Foglietta
+ * https://github.com/robang74
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *     Unless required by applicable law or agreed to in writing, software
+ *     distributed under the License is distributed on an "AS IS" BASIS,
+ *     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *     See the License for the specific language governing permissions and
+ *     limitations under the License.
+ */
+ 
+#include "bitflags.h"
+uint8_t bitflags = 0; // defined extern in bitflags.h
+
+void ACTION_RxMode(void)
+{
+    if(bitchk(BF_MODE_RX_DW))
+        gEeprom.CROSS_BAND_RX_TX = !gEeprom.CROSS_BAND_RX_TX;
+    else
+        gEeprom.DUAL_WATCH = !gEeprom.DUAL_WATCH;
+    bitflp(BF_MODE_RX_DW);
+
+    ACTION_Update();
+}
+
+void ACTION_MainOnly(void)
+{
+    if(bitchk(BT_MONITOR_FN)) {
+        //RAF: can we use here the value gEeprom.TX_VFO + 1?
+        //     if this works, then we saved a whole bit! ;-)
+        uint8_t txvfo;
+        txvfo = (gEeprom.TX_VFO & ~3) ? 0 : gEeprom.TX_VFO + 1;
+        gEeprom.DUAL_WATCH = bitchk(BF_DUAL_WATCH) ? txvfo : 0;
+        //RAF: can we use here the value gEeprom.TX_VFO + 1?
+        //     if this works, then we saved a whole bit! ;-)
+        gEeprom.CROSS_BAND_RX_TX = bitchk(BF_CROSS_BAND) ? txvfo : 0;
+        //RAF: at this point these two variable have the same
+        //     if this is (almost) true, a tristate is enough.
+    } else {
+        //RAF: gEeprom.CROSS_BAND_RX_TX ?= _A _B or (TX_VFO + 1)
+        //     allowed values: 0 (OFF), 1 (A), 2 (B) only.
+        //     if gEeprom.TX_VFO remains informative then
+        //     the following instruction is superfluous.
+        bitset(BF_CROSS_BAND, gEeprom.CROSS_BAND_RX_TX);
+        //RAF: gEeprom.DUAL_WATCH ?= _A _B or (TX_VFO + 1)
+        //     allowed values: 0 (OFF), 1 (A), 2 (B) only.
+        //     if gEeprom.TX_VFO remains informative then
+        //     the following instruction is superfluous.
+        bitset(BF_DUAL_WATCH, gEeprom.DUAL_WATCH);
+        gEeprom.CROSS_BAND_RX_TX = 0;
+        gEeprom.DUAL_WATCH = 0;
+    }
+    bitflp(BT_MONITOR_FN);
+
+    ACTION_Update();
 }
 #endif

@@ -1947,6 +1947,9 @@ static void MENU_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
             return;
     }
 
+#ifdef ENABLE_CHANNEL_UPDOWN_REVERSE
+    Direction = -Direction;
+#endif
     Channel = RADIO_FindNextChannel(gSubMenuSelection + Direction, Direction, bCheckScanList, VFO);
     if (Channel != 0xFF)
         gSubMenuSelection = Channel;

@@ -477,6 +477,9 @@ static void Key_MENU(uint8_t state)
 
 static void Key_UP_DOWN(uint8_t state, int8_t Step)
 {
+#ifdef ENABLE_CHANNEL_UPDOWN_REVERSE
+    Step = -Step;
+#endif
     if (state == BUTTON_EVENT_PRESSED) {
         if (gInputBoxIndex) {
             gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;

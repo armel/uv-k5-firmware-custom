@@ -234,6 +234,9 @@ static void SCANNER_Key_STAR(bool bKeyPressed, bool bKeyHeld)
 
 static void SCANNER_Key_UP_DOWN(bool bKeyPressed, bool pKeyHeld, int8_t Direction)
 {
+#ifdef ENABLE_CHANNEL_UPDOWN_REVERSE
+    Direction = -Direction;
+#endif
     if (pKeyHeld) {
         if (!bKeyPressed)
             return;

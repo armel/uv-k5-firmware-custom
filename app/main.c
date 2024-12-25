@@ -878,6 +878,9 @@ static void MAIN_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
                 return;
             }
 
+#ifdef ENABLE_CHANNEL_UPDOWN_REVERSE
+            Direction = -Direction;
+#endif
             Next = RADIO_FindNextChannel(Channel + Direction, Direction, false, 0);
             if (Next == 0xFF)
                 return;
@@ -895,6 +898,9 @@ static void MAIN_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
         }
 #ifdef ENABLE_NOAA
         else {
+#ifdef ENABLE_CHANNEL_UPDOWN_REVERSE
+            Direction = -Direction;
+#endif
             Channel = NOAA_CHANNEL_FIRST + NUMBER_AddWithWraparound(gEeprom.ScreenChannel[gEeprom.TX_VFO] - NOAA_CHANNEL_FIRST, Direction, 0, 9);
             gEeprom.NoaaChannel[gEeprom.TX_VFO] = Channel;
             gEeprom.ScreenChannel[gEeprom.TX_VFO] = Channel;

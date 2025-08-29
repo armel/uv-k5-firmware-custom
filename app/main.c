@@ -33,6 +33,7 @@
 
 #ifdef ENABLE_FEAT_F4HWN_GAME
 #include "app/breakout.h"
+#include "app/tetris.h"
 #endif
 
 #include "audio.h"
@@ -62,7 +63,7 @@ static void toggle_chan_scanlist(void)
 #endif
         return;
     }
-    
+
     // Remove exclude
     if(gMR_ChannelExclude[gTxVfo->CHANNEL_SAVE] == true)
     {
@@ -105,7 +106,7 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
         gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         return;
     }
-    
+
     gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
     switch (Key) {
@@ -212,7 +213,7 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
 
             gBackup_CROSS_BAND_RX_TX  = gEeprom.CROSS_BAND_RX_TX;
             gEeprom.CROSS_BAND_RX_TX = CROSS_BAND_OFF;
-            gUpdateStatus            = true;        
+            gUpdateStatus            = true;
             if (beep)
                 gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
@@ -359,7 +360,7 @@ void channelMove(uint16_t Channel)
 #endif
 
     RADIO_ConfigureChannel(gEeprom.TX_VFO, gVfoConfigureMode);
-    
+
     return;
 }
 
@@ -396,7 +397,7 @@ void channelMoveSwitch(void) {
 
             channelMove(Channel - 1);
             SETTINGS_SaveVfoIndices();
-            
+
             return;
         }
 
@@ -460,7 +461,7 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             #ifdef ENABLE_VOICE
                 gAnotherVoiceID   = (VOICE_ID_t)Key;
             #endif
-            
+
             return;
         }
 
@@ -482,7 +483,7 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
                 // do nothing
                 return;
             }
-            
+
             gKeyInputCountdown = (gInputBoxIndex == totalDigits) ? (key_input_timeout_500ms / 16) : (key_input_timeout_500ms / 3);
 
             const char *inputStr = INPUTBOX_GetAscii();
@@ -592,6 +593,11 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         APP_RunBreakout();
         return;
     }
+    else if(Key == 6)
+    {
+        APP_RunTetris();
+        return;
+    }
     #endif
 
     processFKeyFunction(Key, true);
@@ -686,7 +692,7 @@ static void MAIN_Key_MENU(bool bKeyPressed, bool bKeyHeld)
                 return;
             }
             #endif
-            
+
             gWasFKeyPressed = false;
 
             if (gScreenToDisplay == DISPLAY_MAIN) {
@@ -746,7 +752,7 @@ static void MAIN_Key_STAR(bool bKeyPressed, bool bKeyHeld)
 
     if (gCurrentFunction == FUNCTION_TRANSMIT)
         return;
-    
+
     if (gInputBoxIndex) {
         if (!bKeyHeld && bKeyPressed)
             gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
@@ -755,7 +761,7 @@ static void MAIN_Key_STAR(bool bKeyPressed, bool bKeyHeld)
 
     if (bKeyHeld && !gWasFKeyPressed){ // long press
         if (!bKeyPressed) // released
-            return; 
+            return;
 
         /*
         #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
@@ -779,18 +785,18 @@ static void MAIN_Key_STAR(bool bKeyPressed, bool bKeyHeld)
     if (bKeyPressed) { // just pressed
         return;
     }
-    
+
     // just released
-    
+
     if (!gWasFKeyPressed) // pressed without the F-key
-    {   
-        if (gScanStateDir == SCAN_OFF 
+    {
+        if (gScanStateDir == SCAN_OFF
 #ifdef ENABLE_NOAA
             && !IS_NOAA_CHANNEL(gTxVfo->CHANNEL_SAVE)
 #endif
 #ifdef ENABLE_SCAN_RANGES
             && gScanRangeStart == 0
-#endif      
+#endif
         )
         {   // start entering a DTMF string
             gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
@@ -813,7 +819,7 @@ static void MAIN_Key_STAR(bool bKeyPressed, bool bKeyHeld)
         if (IS_NOAA_CHANNEL(gTxVfo->CHANNEL_SAVE)) {
             gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
             return;
-        }               
+        }
 #endif
         // scan the CTCSS/DCS code
         gBackup_CROSS_BAND_RX_TX  = gEeprom.CROSS_BAND_RX_TX;
@@ -822,7 +828,7 @@ static void MAIN_Key_STAR(bool bKeyPressed, bool bKeyHeld)
         SCANNER_Start(true);
         gRequestDisplayScreen = DISPLAY_SCANNER;
     }
-    
+
     //gPttWasReleased = true; Fixed issue #138
     gUpdateStatus   = true;
 }

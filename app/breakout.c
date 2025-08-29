@@ -14,13 +14,13 @@
  *     limitations under the License.
  */
 
+#include "app/game.h"
 #include "app/breakout.h"
 
 #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
 #include "screenshot.h"
 #endif
 
-static uint32_t randSeed = 1;
 static uint8_t blockAnim = 0;
 
 bool isInitialized = false;
@@ -152,22 +152,6 @@ const uint8_t BITMAP_blockEmpty[15] =
     0b00000000,
 };
 
-// Initialise seed
-void srand_custom(uint32_t seed) {
-    randSeed = seed;
-}
-
-// Return pseudo-random from 0 to RAND_MAX (here 32767)
-int rand_custom(void) {
-    randSeed = randSeed * 1103515245 + 12345;
-    return (randSeed >> 16) & 0x7FFF; // 15 bits
-}
-
-// Return integer from min to max include
-int randInt(int min, int max) {
-    return min + (rand_custom() % (max - min + 1));
-}
-
 // Reset
 void reset(void)
 {
@@ -235,7 +219,7 @@ void drawBall() {
     else if (ball.x <= 2)  // Left
     {
         ball.dx = abs(ball.dx);
-    } 
+    }
     else if (ball.x >= 124)  // Right
     {
         ball.dx = -abs(ball.dx);
@@ -248,7 +232,7 @@ void drawBall() {
             isBeep = true;
             tone = 400;
         }
-    } 
+    }
     else if(ball.y > 49) {
         ballCount--;
         UI_DisplayClear();
@@ -304,7 +288,7 @@ void drawWall() {
         if (brick[i].destroy == false) {
             if ((ball.x + 1 >= brick[i].x &&
                  ball.x - 1 <= brick[i].x + brick[i].w) &&
-                ((ball.y + 1 >= brick[i].y && 
+                ((ball.y + 1 >= brick[i].y &&
                   ball.y - 1 <= brick[i].y + brick[i].h))) {
                 brick[i].destroy = true;
                 score++;
@@ -362,7 +346,7 @@ void drawRacket() {
 static void OnKeyDown(uint8_t key)
 {
     bool wasPaused = isPaused;
-    
+
     switch (key)
     {
     case KEY_4:
@@ -375,7 +359,7 @@ static void OnKeyDown(uint8_t key)
     case KEY_DOWN:
         if(!isPaused && racket.x < 102)
             racket.x += 2;
-        isPaused = false;        
+        isPaused = false;
         break;
     case KEY_MENU:
         isPaused = !isPaused;
@@ -390,7 +374,7 @@ static void OnKeyDown(uint8_t key)
         isInitialized = false;
         break;
     }
-    
+
     if(wasPaused == true && isPaused == false)
     {
         // Clear the pause text
@@ -402,7 +386,7 @@ static void OnKeyDown(uint8_t key)
 }
 
 
-// Key 
+// Key
 KEY_Code_t GetKey()
 {
     KEY_Code_t btn = KEYBOARD_Poll();
@@ -413,15 +397,15 @@ KEY_Code_t GetKey()
     return btn;
 }
 
-// HandleUserInput 
+// HandleUserInput
 bool HandleUserInput()
 {
     // Store previous key state
     kbd.prev = kbd.current;
-    
+
     // Get the current key
     kbd.current = GetKey();
-    
+
     // Detect valid key press continuation (same key still pressed)
     if (kbd.current != KEY_INVALID && kbd.current == kbd.prev)
     {
@@ -431,12 +415,12 @@ bool HandleUserInput()
     {
         kbd.counter = 0;
     }
-    
+
     // Process the key if counter indicates it should be handled
     if (kbd.counter == 1)
     {
         OnKeyDown(kbd.current);
-        
+
         // Special handling for MENU key
         if(kbd.current == KEY_MENU)
         {
@@ -444,7 +428,7 @@ bool HandleUserInput()
             SYSTEM_DelayMs(250);
         }
     }
-    
+
     return true;
 }
 
@@ -488,14 +472,14 @@ void APP_RunBreakout(void) {
                         getScreenShot(false);
                     #endif
                 }
-                
+
                 swap = (swap + 1) % 4;
 
                 drawScore();
                 drawWall();
                 drawRacket();
                 drawBall();
-                   
+
                 if(isBeep)
                 {
                     playBeep(tone);

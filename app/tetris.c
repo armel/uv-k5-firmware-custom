@@ -29,7 +29,6 @@ static Tetromino nextTetromino;
 static uint32_t score = 0;
 static uint16_t level = 1;
 static uint16_t linesCleared = 0;
-static bool isInitialized = false;
 static bool isPaused = false;
 static bool isGameOver = false;
 static uint32_t fallCounter = 0;
@@ -38,44 +37,15 @@ static uint32_t fallSpeed = 30;
 static char str[16];
 static KeyboardState kbd = {KEY_INVALID, KEY_INVALID, 0};
 
-// --- Tetromino shapes ---
-// [Type][Rotation][Y][X]
-const uint8_t aTetromino[7][4][4][4] = {
-    // I
-    {{{0,0,0,0}, {1,1,1,1}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,0,0}, {0,1,0,0}, {0,1,0,0}, {0,1,0,0}},
-     {{0,0,0,0}, {0,0,0,0}, {1,1,1,1}, {0,0,0,0}},
-     {{0,0,1,0}, {0,0,1,0}, {0,0,1,0}, {0,0,1,0}}},
-    // O
-    {{{0,1,1,0}, {0,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,1,0}, {0,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,1,0}, {0,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,1,0}, {0,1,1,0}, {0,0,0,0}, {0,0,0,0}}},
-    // T
-    {{{0,1,0,0}, {1,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,0,0}, {0,1,1,0}, {0,1,0,0}, {0,0,0,0}},
-     {{0,0,0,0}, {1,1,1,0}, {0,1,0,0}, {0,0,0,0}},
-     {{0,1,0,0}, {1,1,0,0}, {0,1,0,0}, {0,0,0,0}}},
-    // L
-    {{{0,0,1,0}, {1,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,0,0}, {0,1,0,0}, {0,1,1,0}, {0,0,0,0}},
-     {{0,0,0,0}, {1,1,1,0}, {1,0,0,0}, {0,0,0,0}},
-     {{1,1,0,0}, {0,1,0,0}, {0,1,0,0}, {0,0,0,0}}},
-    // J
-    {{{1,0,0,0}, {1,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,1,0}, {0,1,0,0}, {0,1,0,0}, {0,0,0,0}},
-     {{0,0,0,0}, {1,1,1,0}, {0,0,1,0}, {0,0,0,0}},
-     {{0,1,0,0}, {0,1,0,0}, {1,1,0,0}, {0,0,0,0}}},
-    // S
-    {{{0,1,1,0}, {1,1,0,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,1,0,0}, {0,1,1,0}, {0,0,1,0}, {0,0,0,0}},
-     {{0,0,0,0}, {0,1,1,0}, {1,1,0,0}, {0,0,0,0}},
-     {{1,0,0,0}, {1,1,0,0}, {0,1,0,0}, {0,0,0,0}}},
-    // Z
-    {{{1,1,0,0}, {0,1,1,0}, {0,0,0,0}, {0,0,0,0}},
-     {{0,0,1,0}, {0,1,1,0}, {0,1,0,0}, {0,0,0,0}},
-     {{0,0,0,0}, {1,1,0,0}, {0,1,1,0}, {0,0,0,0}},
-     {{0,1,0,0}, {1,1,0,0}, {1,0,0,0}, {0,0,0,0}}}
+// --- Tetromino shapes (Bitmasked) ---
+const uint16_t aTetromino[7][4] = {
+    {0x0F00, 0x2222, 0x00F0, 0x4444}, // I
+    {0x0660, 0x0660, 0x0660, 0x0660}, // O
+    {0x0E40, 0x4C40, 0x4E00, 0x4640}, // T
+    {0x8E00, 0x6440, 0x0E20, 0x44C0}, // L
+    {0x2E00, 0x4460, 0x0E80, 0xC440}, // J
+    {0x6C00, 0x4620, 0x06C0, 0x8C40}, // S
+    {0xC600, 0x2640, 0x0C60, 0x4C80}  // Z
 };
 
 // --- Game Logic ---
@@ -87,7 +57,7 @@ void drawBlock(int8_t x, int8_t y, bool fill) {
 void drawTetromino(const Tetromino* t, bool fill) {
     for (uint8_t i = 0; i < 4; i++) {
         for (uint8_t j = 0; j < 4; j++) {
-            if (t->shape[t->rotation][i][j]) {
+            if ((t->shape[t->rotation] >> (i * 4 + j)) & 1) {
                 drawBlock(BOARD_X_OFFSET + (t->pos.x + j) * BLOCK_SIZE,
                           BOARD_Y_OFFSET + (t->pos.y + i) * BLOCK_SIZE,
                           fill);
@@ -132,7 +102,7 @@ void drawScoreTetris() {
 bool checkCollision(const Tetromino* t) {
     for (uint8_t i = 0; i < 4; i++) {
         for (uint8_t j = 0; j < 4; j++) {
-            if (t->shape[t->rotation][i][j]) {
+            if ((t->shape[t->rotation] >> (i * 4 + j)) & 1) {
                 int8_t boardX = t->pos.x + j;
                 int8_t boardY = t->pos.y + i;
 
@@ -151,7 +121,7 @@ bool checkCollision(const Tetromino* t) {
 void mergeTetromino() {
     for (uint8_t i = 0; i < 4; i++) {
         for (uint8_t j = 0; j < 4; j++) {
-            if (currentTetromino.shape[currentTetromino.rotation][i][j]) {
+            if ((currentTetromino.shape[currentTetromino.rotation] >> (i * 4 + j)) & 1) {
                 int8_t boardX = currentTetromino.pos.x + j;
                 int8_t boardY = currentTetromino.pos.y + i;
                 if (boardY >= 0) {
@@ -222,53 +192,6 @@ void resetGame() {
 
 // --- Input and Game Loop ---
 
-static void OnKeyDown(uint8_t key) {
-    if (isGameOver) {
-        if (key == KEY_MENU || key == KEY_EXIT) {
-            resetGame();
-        }
-        return;
-    }
-
-    if (key == KEY_MENU) {
-        isPaused = !isPaused;
-        return;
-    }
-
-    if (isPaused) return;
-
-    Tetromino temp = currentTetromino;
-
-    switch (key) {
-        case KEY_2: // Rotate
-            temp.rotation = (temp.rotation + 1) % 4;
-            break;
-        case KEY_4:
-            temp.pos.x--;
-            break;
-        case KEY_6:
-            temp.pos.x++;
-            break;
-        case KEY_8:
-            temp.pos.y++;
-            break;
-        case KEY_PTT: // Drop
-             while(!checkCollision(&temp)) {
-                currentTetromino.pos.y = temp.pos.y;
-                temp.pos.y++;
-            }
-            fallCounter = fallSpeed; // Force immediate lock
-            return;
-        case KEY_EXIT:
-            isInitialized = false;
-            return;
-    }
-
-    if (!checkCollision(&temp)) {
-        currentTetromino = temp;
-    }
-}
-
 // TODO: Refactoring
 KEY_Code_t GetKeyTetris() {
     KEY_Code_t btn = KEYBOARD_Poll();
@@ -283,7 +206,51 @@ void HandleUserInputTetris() {
     kbd.current = GetKeyTetris();
 
     if (kbd.current != KEY_INVALID && kbd.current != kbd.prev) {
-        OnKeyDown(kbd.current);
+        if (isGameOver) {
+            if (kbd.current == KEY_MENU || kbd.current == KEY_EXIT) {
+                resetGame();
+            }
+            return;
+        }
+
+        if (kbd.current == KEY_MENU) {
+            isPaused = !isPaused;
+            return;
+        }
+
+        if (isPaused) return;
+
+        Tetromino temp = currentTetromino;
+
+        switch (kbd.current) {
+            case KEY_2: // Rotate
+                temp.rotation = (temp.rotation + 1) % 4;
+                break;
+            case KEY_4:
+                temp.pos.x--;
+                break;
+            case KEY_6:
+                temp.pos.x++;
+                break;
+            case KEY_8:
+                temp.pos.y++;
+                break;
+            case KEY_PTT: // Drop
+                 while(!checkCollision(&temp)) {
+                    currentTetromino.pos.y = temp.pos.y;
+                    temp.pos.y++;
+                }
+                fallCounter = fallSpeed; // Force immediate lock
+                return;
+            case KEY_EXIT:
+                break;
+            default:
+                break;
+        }
+
+        if (!checkCollision(&temp)) {
+            currentTetromino = temp;
+        }
     }
 }
 
@@ -326,10 +293,12 @@ void APP_RunTetris(void) {
     srand_custom(BK4819_ReadRegister(BK4819_REG_67) * gBatteryVoltageAverage);
 
     resetGame();
-    isInitialized = true;
 
-    while (isInitialized) {
+    while (true) {
         HandleUserInputTetris();
+        if (kbd.current == KEY_EXIT && kbd.prev == kbd.current) {
+            break;
+        }
         updateGame();
         renderGame();
         SYSTEM_DelayMs(10);

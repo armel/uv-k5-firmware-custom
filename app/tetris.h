@@ -52,7 +52,7 @@ typedef struct {
 } Position;
 
 typedef struct {
-    const uint8_t (*shape)[4][4];
+    const uint16_t *shape;
     Position pos;
     uint8_t rotation;
     uint8_t type;

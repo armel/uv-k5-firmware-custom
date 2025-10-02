@@ -883,16 +883,16 @@ uint8_t Rssi2Y(uint16_t rssi)
         for (uint8_t i = 0; i < 128; ++i)
         {
             uint16_t rssi = rssiHistory[i >> settings.stepsCount];
+            // stretch bars to fill the screen width
+            uint8_t x = i * 128 / bars + shift_graph;
             if (rssi != RSSI_MAX_VALUE)
             {
-                // stretch bars to fill the screen width
-                uint8_t x = i * 128 / bars + shift_graph;
                 for (uint8_t xx = ox; xx < x; xx++)
                 {
                     DrawVLine(Rssi2Y(rssi), DrawingEndY, xx, true);
                 }
-                ox = x;
             }
+            ox = x;
         }
     }
 #else

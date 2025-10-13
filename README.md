@@ -118,6 +118,9 @@ Special thanks to Jean-Cyrille F6IWW (2 times), Fabrice 14RC123, David F4BPP, Ol
         * scan list 1,
         * scan list 2,
         * scan list 3,
+        * scan list 1+2,
+        * scan list 1+3,
+        * scan list 2+3,
         * scan lists [1, 2, 3],
         * scan all (all channels with or without list),
     * add scan list shortcuts,
@@ -137,7 +140,7 @@ Special thanks to Jean-Cyrille F6IWW (2 times), Fabrice 14RC123, David F4BPP, Ol
     * add F + 8 to quickly switch backlight between BLMin and BLMax on demand (this bypass BackLt strategy),
     * add F + 9 to return to BackLt strategy,
     * add long press on MENU, in * SCAN mode, to temporarily exclude a memory channel,
-    * add short press on [0, 1, 2, 3, 4 or 5], in * SCAN mode, to dynamically change scan list.
+    * add short press on [0, 1, 2, 3, 4, 5, 6, 7, or 8], in * SCAN mode, to dynamically change scan list.
 * many fix:
     * squelch, 
     * s-meter,

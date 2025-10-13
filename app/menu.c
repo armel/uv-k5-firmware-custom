@@ -48,6 +48,14 @@
 
 uint8_t gUnlockAllTxConfCnt;
 
+// Preview state for live-applying CTCSS/DCS while scrolling
+static bool gCssPreviewActive = false;
+static uint8_t gCssPreviewMenu = 0; // one of MENU_R_CTCS, MENU_T_CTCS, MENU_R_DCS, MENU_T_DCS
+static uint8_t gCssOrigRxCodeType = 0;
+static uint8_t gCssOrigRxCode = 0;
+static uint8_t gCssOrigTxCodeType = 0;
+static uint8_t gCssOrigTxCode = 0;
+
 #ifdef ENABLE_F_CAL_MENU
     void writeXtalFreqCal(const int32_t value, const bool update_eeprom)
     {
@@ -1611,6 +1619,20 @@ static void MENU_Key_EXIT(bool bKeyPressed, bool bKeyHeld)
         {
             if (gInputBoxIndex == 0 || UI_MENU_GetCurrentMenuId() != MENU_OFFSET)
             {
+                // If we were previewing CSS, restore original on EXIT
+                if (gCssPreviewActive) {
+                    const uint8_t menuid = UI_MENU_GetCurrentMenuId();
+                    if (menuid == MENU_R_CTCS || menuid == MENU_R_DCS ||
+                        menuid == MENU_T_CTCS || menuid == MENU_T_DCS) {
+                        gTxVfo->freq_config_RX.CodeType = gCssOrigRxCodeType;
+                        gTxVfo->freq_config_RX.Code     = gCssOrigRxCode;
+                        gTxVfo->freq_config_TX.CodeType = gCssOrigTxCodeType;
+                        gTxVfo->freq_config_TX.Code     = gCssOrigTxCode;
+                        RADIO_SetupRegisters(true);
+                    }
+                    gCssPreviewActive = false;
+                }
+
                 gAskForConfirmation = 0;
                 gIsInSubMenu        = false;
                 gInputBoxIndex      = 0;
@@ -1683,6 +1705,20 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 
         gAskForConfirmation = 0;
         gIsInSubMenu        = true;
+
+        // Begin CSS preview capture when entering submenu
+        gCssPreviewActive = false;
+        gCssPreviewMenu = UI_MENU_GetCurrentMenuId();
+        if (gCssPreviewMenu == MENU_R_CTCS || gCssPreviewMenu == MENU_R_DCS ||
+            gCssPreviewMenu == MENU_T_CTCS || gCssPreviewMenu == MENU_T_DCS)
+        {
+            // Capture original RX/TX CSS state for rollback on EXIT
+            gCssOrigRxCodeType = gTxVfo->freq_config_RX.CodeType;
+            gCssOrigRxCode     = gTxVfo->freq_config_RX.Code;
+            gCssOrigTxCodeType = gTxVfo->freq_config_TX.CodeType;
+            gCssOrigTxCode     = gTxVfo->freq_config_TX.Code;
+            gCssPreviewActive  = true;
+        }
 
 //      if (UI_MENU_GetCurrentMenuId() != MENU_D_LIST)
         {
@@ -1770,12 +1806,17 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
                     gFlagAcceptSetting  = true;
                     gIsInSubMenu        = false;
                     gAskForConfirmation = 0;
+
+                    // Confirmed: end CSS preview session
+                    gCssPreviewActive = false;
             }
         }
         else
         {
             gFlagAcceptSetting = true;
             gIsInSubMenu       = false;
+            // Confirmed: end CSS preview session
+            gCssPreviewActive = false;
         }
     }
 
@@ -1945,6 +1986,42 @@ static void MENU_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
 
         default:
             MENU_ClampSelection(Direction);
+
+            // Live-apply CTCSS/DCS while scrolling in submenu
+            if (gIsInSubMenu && gCssPreviewActive) {
+                const uint8_t menuid = UI_MENU_GetCurrentMenuId();
+                FREQ_Config_t *pCfg = NULL;
+                if (menuid == MENU_R_CTCS || menuid == MENU_R_DCS) {
+                    pCfg = &gTxVfo->freq_config_RX;
+                } else if (menuid == MENU_T_CTCS || menuid == MENU_T_DCS) {
+                    pCfg = &gTxVfo->freq_config_TX;
+                }
+                if (pCfg) {
+                    if (menuid == MENU_R_CTCS || menuid == MENU_T_CTCS) {
+                        if (gSubMenuSelection == 0) {
+                            pCfg->CodeType = CODE_TYPE_OFF;
+                            pCfg->Code     = 0;
+                        } else {
+                            pCfg->CodeType = CODE_TYPE_CONTINUOUS_TONE;
+                            pCfg->Code     = gSubMenuSelection - 1;
+                        }
+                    } else { // DCS menus
+                        if (gSubMenuSelection == 0) {
+                            pCfg->CodeType = CODE_TYPE_OFF;
+                            pCfg->Code     = 0;
+                        } else if (gSubMenuSelection < 105) {
+                            pCfg->CodeType = CODE_TYPE_DIGITAL;
+                            pCfg->Code     = gSubMenuSelection - 1;
+                        } else {
+                            pCfg->CodeType = CODE_TYPE_REVERSE_DIGITAL;
+                            pCfg->Code     = gSubMenuSelection - 105;
+                        }
+                    }
+                    // Apply to hardware without saving
+                    RADIO_SetupRegisters(true);
+                }
+            }
+
             gRequestDisplayScreen = DISPLAY_MENU;
             return;
     }

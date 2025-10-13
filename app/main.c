@@ -433,7 +433,7 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
         if (gScanStateDir != SCAN_OFF){
             switch(Key) {
-                case KEY_0...KEY_5:
+                case KEY_0...KEY_8:
                     gEeprom.SCAN_LIST_DEFAULT = Key;
                     #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
                         SETTINGS_WriteCurrentState();

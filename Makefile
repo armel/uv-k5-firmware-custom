@@ -168,7 +168,9 @@ ifeq ($(ENABLE_FEAT_F4HWN_SCREENSHOT), 1)
 OBJS += screenshot.o
 endif
 ifeq ($(ENABLE_FEAT_F4HWN_GAME), 1)
+OBJS += app/game.o
 OBJS += app/breakout.o
+OBJS += app/tetris.o
 endif
 OBJS += app/scanner.o
 ifeq ($(ENABLE_UART),1)

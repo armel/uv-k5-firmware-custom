@@ -14,6 +14,9 @@
  *     limitations under the License.
  */
 
+#ifndef APP_TETRIS_H
+#define APP_TETRIS_H
+
 #include "../bitmaps.h"
 #include "../board.h"
 #include "../bsp/dp32g030/gpio.h"
@@ -32,40 +35,28 @@
 #include "../settings.h"
 #include "../ui/helper.h"
 #include "../audio.h"
-#include "game.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 
-#define BRICK_NUMBER 18
-#define BALL_NUMBER  5
+#define BOARD_WIDTH 10
+#define BOARD_HEIGHT 18
+#define BLOCK_SIZE 3 // Adjusted for screen size
+#define BOARD_X_OFFSET ((LCD_WIDTH - (BOARD_WIDTH * BLOCK_SIZE)) / 2)
+#define BOARD_Y_OFFSET 1
 
 typedef struct {
-    uint8_t x;       // x
-    uint8_t y;       // y
-    uint8_t w;       // width
-    uint8_t h;       // height
-    uint8_t s;       // style
-    bool destroy;    // active, if true, check this button, else bypass
-} Brick;
+    int8_t x;
+    int8_t y;
+} Position;
 
 typedef struct {
-    int8_t x;   // x
-    uint8_t y;  // y
-    uint8_t w;  // width
-    uint8_t h;  // height
-    uint8_t p;  // previous x
-} Racket;
-
-typedef struct {
-    int16_t x;  // x
-    int8_t y;   // y
-    uint8_t w;  // width
-    uint8_t h;  // height
-    int8_t dx;  // move x
-    int8_t dy;  // move y
-} Ball;
+    const uint16_t *shape;
+    Position pos;
+    uint8_t rotation;
+    uint8_t type;
+} Tetromino;
 
 typedef struct KeyboardState
 {
@@ -74,8 +65,6 @@ typedef struct KeyboardState
     uint8_t counter;
 } KeyboardState;
 
-void initWall(void);
-void drawWall(void);
-void initRacket(void);
-void drawRacket(void);
-void APP_RunBreakout(void);
+void APP_RunTetris(void);
+
+#endif // APP_TETRIS_H

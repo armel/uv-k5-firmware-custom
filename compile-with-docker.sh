@@ -54,8 +54,14 @@ custom() {
         rm -f ./compiled-firmware/* && cd /app && make -s \
         EDITION_STRING=Custom \
         TARGET=f4hwn.custom \
-        && cp f4hwn.custom* compiled-firmware/"
+        && cp f4hwn.custom* compiled-firmware/ \
+        && arm-none-eabi-size f4hwn.custom | awk 'NR==2 { \
+            used=\$1+\$2; \
+            limit=61440; \
+            printf \"Flash usage: %d / %d bytes (%.2f%%)\\n\", used, limit, (used/limit)*100 \
+        }'"
 }
+
 
 standard() {
     echo "📦 Compiling Standard..."

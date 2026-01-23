@@ -40,14 +40,14 @@ extern uint16_t          gFM_FrequencyDeviation;
 extern bool              gFM_FoundFrequency;
 extern uint16_t          gFM_RestoreCountdown_10ms;
 
-bool    FM_CheckValidChannel(uint8_t Channel);
+// bool    FM_CheckValidChannel(uint8_t Channel);
 // returns first valid channel starting at Channel
-uint8_t FM_FindNextChannel(uint8_t Channel, uint8_t Direction);
+// uint8_t FM_FindNextChannel(uint8_t Channel, uint8_t Direction);
 int     FM_ConfigureChannelState(void);
 void    FM_TurnOff(void);
-void    FM_EraseChannels(void);
+// void    FM_EraseChannels(void);
 
-void    FM_Tune(uint16_t Frequency, int8_t Step, bool bFlag);
+void    FM_Tune(uint16_t Frequency, int8_t Step);
 void    FM_PlayAndUpdate(void);
 int     FM_CheckFrequencyLock(uint16_t Frequency, uint16_t LowerLimit);
 

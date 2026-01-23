@@ -770,7 +770,7 @@ static void MAIN_Key_STAR(bool bKeyPressed, bool bKeyHeld)
         SETTINGS_WriteCurrentState();
         #endif
         */
-        ACTION_Scan(false);// toggle scanning
+        ACTION_Scan();// toggle scanning
 
         gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
         return;

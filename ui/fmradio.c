@@ -32,69 +32,43 @@
 void UI_DisplayFM(void)
 {
     char String[16] = {0};
-    char *pPrintStr = String;
     UI_DisplayClear();
 
+    // 1. Top Left Title
     UI_PrintString("FM", 2, 0, 0, 8);
 
-    sprintf(String, "%d%s-%dM", 
-        BK1080_GetFreqLoLimit(gEeprom.FM_Band)/10,
-        gEeprom.FM_Band == 0 ? ".5" : "",
-        BK1080_GetFreqHiLimit(gEeprom.FM_Band)/10
-        );
-    
-    UI_PrintStringSmallNormal(String, 1, 0, 6);
 
-    //uint8_t spacings[] = {20,10,5};
-    //sprintf(String, "%d0k", spacings[gEeprom.FM_Space % 3]);
-    //UI_PrintStringSmallNormal(String, 127 - 4*7, 0, 6);
 
-    if (gAskToSave) {
-        pPrintStr = "SAVE?";
-    } else if (gAskToDelete) {
-        pPrintStr = "DEL?";
-    } else if (gFM_ScanState == FM_SCAN_OFF) {
-        if (gEeprom.FM_IsMrMode) {
-            sprintf(String, "MR(CH%02u)", gEeprom.FM_SelectedChannel + 1);
-            pPrintStr = String;
-        } else {
-            pPrintStr = "VFO";
-            for (unsigned int i = 0; i < 20; i++) {
-                if (gEeprom.FM_FrequencyPlaying == gFM_Channels[i]) {
-                    sprintf(String, "VFO(CH%02u)", i + 1);
-                    pPrintStr = String;
-                    break;
-                }
-            }
-        }
-    } else if (gFM_AutoScan) {
-        sprintf(String, "A-SCAN(%u)", gFM_ChannelPosition + 1);
-        pPrintStr = String;
+    // 3. Determine Center Label (VFO or Scanning)
+    const char *pPrintStr = "";
+
+    if (gFM_ScanState != FM_SCAN_OFF) {
+        // We are currently searching for a station
+        pPrintStr = "SCAN";
     } else {
-        pPrintStr = "M-SCAN";
+        // Standard tuning mode
+        pPrintStr = "VFO";
     }
 
-    UI_PrintString(pPrintStr, 0, 127, 3, 10); // memory, vfo, scan
+    // Print the mode label in the middle (Line 3)
+    UI_PrintString(pPrintStr, 0, 127, 3, 10);
 
+    // 4. Frequency Display Logic
     memset(String, 0, sizeof(String));
-    if (gAskToSave || (gEeprom.FM_IsMrMode && gInputBoxIndex > 0)) {
-        UI_GenerateChannelString(String, gFM_ChannelPosition);
-    } else if (gAskToDelete) {
-        sprintf(String, "CH-%02u", gEeprom.FM_SelectedChannel + 1);
-    } else {
-        if (gInputBoxIndex == 0) {
-            sprintf(String, "%3d.%d", gEeprom.FM_FrequencyPlaying / 10, gEeprom.FM_FrequencyPlaying % 10);
-        } else {
-            const char * ascii = INPUTBOX_GetAscii();
-            sprintf(String, "%.3s.%.1s",ascii, ascii + 3);
-        }
 
-        UI_DisplayFrequency(String, 36, 1, gInputBoxIndex == 0);  // frequency
-        ST7565_BlitFullScreen();
-        return;
+    if (gInputBoxIndex == 0) {
+        // Normal display: e.g., "101.9"
+        sprintf(String, "%3d.%d", gEeprom.FM_FrequencyPlaying / 10, gEeprom.FM_FrequencyPlaying % 10);
+    } else {
+        // Digit entry display: Formats the input box buffer
+        const char * ascii = INPUTBOX_GetAscii();
+        // Assuming 4 digits entered: "1019" -> "101.9"
+        sprintf(String, "%.3s.%.1s", ascii, ascii + 3);
     }
 
-    UI_PrintString(String, 0, 127, 1, 10);
+    // Render the large frequency numbers
+    // Params: String, X-offset (32 centers it well), Line (1), IsLargeFont
+    UI_DisplayFrequency(String, 32, 1, true);
 
     ST7565_BlitFullScreen();
 }

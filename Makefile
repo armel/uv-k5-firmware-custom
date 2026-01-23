@@ -4,20 +4,20 @@
 # 1 = enable
 
 # ---- STOCK QUANSHENG FEATURES ----
-ENABLE_FMRADIO                  ?= 0
+ENABLE_FMRADIO                  ?= 1
 ENABLE_UART                     ?= 1
 ENABLE_AIRCOPY                  ?= 0
 ENABLE_NOAA                     ?= 0
 ENABLE_VOICE                    ?= 0
-ENABLE_VOX                      ?= 1
+ENABLE_VOX                      ?= 0
 ENABLE_ALARM                    ?= 0
-ENABLE_TX1750                   ?= 1
+ENABLE_TX1750                   ?= 0
 ENABLE_PWRON_PASSWORD           ?= 0
 ENABLE_DTMF_CALLING             ?= 0
 ENABLE_FLASHLIGHT               ?= 1
 
 # ---- CUSTOM MODS ----
-ENABLE_SPECTRUM                 ?= 0
+ENABLE_SPECTRUM                 ?= 1
 ENABLE_BIG_FREQ                 ?= 1
 ENABLE_SMALL_BOLD               ?= 1
 ENABLE_CUSTOM_MENU_LAYOUT       ?= 1

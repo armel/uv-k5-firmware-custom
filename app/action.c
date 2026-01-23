@@ -47,7 +47,7 @@
 #endif
 
 #if defined(ENABLE_FMRADIO)
-static void ACTION_Scan_FM(bool bRestart);
+static void ACTION_Scan_FM();
 #endif
 
 #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
@@ -56,7 +56,7 @@ inline static void ACTION_Alarm() { ACTION_AlarmOr1750(false); }
 inline static void ACTION_1750() { ACTION_AlarmOr1750(true); };
 #endif
 
-inline static void ACTION_ScanRestart() { ACTION_Scan(true); };
+inline static void ACTION_ScanRestart() { ACTION_Scan(); };
 
 void (*action_opt_table[])(void) = {
     [ACTION_OPT_NONE] = &FUNCTION_NOP,
@@ -185,13 +185,13 @@ void ACTION_Monitor(void)
         gRequestDisplayScreen = gScreenToDisplay;
 }
 
-void ACTION_Scan(bool bRestart)
+void ACTION_Scan()
 {
-    (void)bRestart;
+    // (void)bRestart;
 
 #ifdef ENABLE_FMRADIO
     if (gFmRadioMode) {
-        ACTION_Scan_FM(bRestart);
+        ACTION_Scan_FM();
         return;
     }
 #endif
@@ -384,7 +384,7 @@ void ACTION_FM(void)
     }
 }
 
-static void ACTION_Scan_FM(bool bRestart)
+static void ACTION_Scan_FM()
 {
     if (FUNCTION_IsRx())
         return;
@@ -404,19 +404,14 @@ static void ACTION_Scan_FM(bool bRestart)
 
     uint16_t freq;
 
-    if (bRestart) {
-        gFM_AutoScan = true;
-        gFM_ChannelPosition = 0;
-        FM_EraseChannels();
-        freq = BK1080_GetFreqLoLimit(gEeprom.FM_Band);
-    } else {
+    if (true) {
         gFM_AutoScan = false;
         gFM_ChannelPosition = 0;
         freq = gEeprom.FM_FrequencyPlaying;
     }
 
     BK1080_GetFrequencyDeviation(freq);
-    FM_Tune(freq, 1, bRestart);
+    FM_Tune(freq, 1);
 
 #ifdef ENABLE_VOICE
     gAnotherVoiceID = VOICE_ID_SCANNING_BEGIN;

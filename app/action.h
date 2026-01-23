@@ -21,7 +21,7 @@
 
 void ACTION_Power(void);
 void ACTION_Monitor(void);
-void ACTION_Scan(bool bRestart);
+void ACTION_Scan();
 #ifdef ENABLE_VOX
     void ACTION_Vox(void);
 #endif

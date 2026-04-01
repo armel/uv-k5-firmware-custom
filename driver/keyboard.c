@@ -151,3 +151,8 @@ KEY_Code_t KEYBOARD_Poll(void)
 
     return Key;
 }
+
+void HideFKeyIcon(void) {
+    gWasFKeyPressed       = false;
+    gUpdateStatus         = true;
+}

@@ -291,77 +291,38 @@ void Main(void)
 #endif
     }
 
-    /*
     #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
-    if(gEeprom.CURRENT_STATE == 2 || gEeprom.CURRENT_STATE == 5)
-    {
-            gScanRangeStart = gScanRangeStart ? 0 : gTxVfo->pRX->Frequency;
-            gScanRangeStop = gEeprom.VfoInfo[!gEeprom.TX_VFO].freq_config_RX.Frequency;
-            if(gScanRangeStart > gScanRangeStop)
-            {
-                SWAP(gScanRangeStart, gScanRangeStop);
-            }
-    }
-    switch (gEeprom.CURRENT_STATE) {
-        case 1:
-            gEeprom.SCAN_LIST_DEFAULT = gEeprom.CURRENT_LIST;
-            CHFRSCANNER_Start(true, SCAN_FWD);
-            break;
+        if (gEeprom.CURRENT_STATE == 2 || gEeprom.CURRENT_STATE == 5)
+            CHFRSCANNER_ScanRange();
 
-        case 2:
-            CHFRSCANNER_Start(true, SCAN_FWD);
-            break;
+        switch (gEeprom.CURRENT_STATE) {
+            case 1:
+                gEeprom.SCAN_LIST_DEFAULT = gEeprom.CURRENT_LIST;
+                CHFRSCANNER_Start(true, SCAN_FWD);
+                break;
 
-        #ifdef ENABLE_FMRADIO
-        case 3:
-            ACTION_FM();
-            GUI_SelectNextDisplay(gRequestDisplayScreen);
-            break;
-        #endif
+            case 2:
+                CHFRSCANNER_Start(true, SCAN_FWD);
+                break;
 
-        #ifdef ENABLE_SPECTRUM
-        case 4:
-            APP_RunSpectrum();
-            break;
-        case 5:
-            APP_RunSpectrum();
-            break;
-        #endif
+            #ifdef ENABLE_FMRADIO
+                case 3:
+                    ACTION_FM();
+                    GUI_SelectNextDisplay(gRequestDisplayScreen);
+                    break;
+            #endif
 
-        default:
-            // No action for CURRENT_STATE == 0 or other unexpected values
-            break;
-    }
-    #endif
-    */
+            #ifdef ENABLE_SPECTRUM
+                case 4:
+                case 5:
+                    APP_RunSpectrum();
+                    break;
+            #endif
 
-    #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
-        if (gEeprom.CURRENT_STATE == 2 || gEeprom.CURRENT_STATE == 5) {
-            gScanRangeStart = gScanRangeStart ? 0 : gTxVfo->pRX->Frequency;
-            gScanRangeStop = gEeprom.VfoInfo[!gEeprom.TX_VFO].freq_config_RX.Frequency;
-            if (gScanRangeStart > gScanRangeStop) {
-                SWAP(gScanRangeStart, gScanRangeStop);
-            }
+            default:
+                // No action for CURRENT_STATE == 0 or other unexpected values
+                break;
         }
-
-        if (gEeprom.CURRENT_STATE == 1) {
-            gEeprom.SCAN_LIST_DEFAULT = gEeprom.CURRENT_LIST;
-        }
-
-        if (gEeprom.CURRENT_STATE == 1 || gEeprom.CURRENT_STATE == 2) {
-            CHFRSCANNER_Start(true, SCAN_FWD);
-        }
-        #ifdef ENABLE_FMRADIO
-        else if (gEeprom.CURRENT_STATE == 3) {
-            ACTION_FM();
-            GUI_SelectNextDisplay(gRequestDisplayScreen);
-        }
-        #endif
-        #ifdef ENABLE_SPECTRUM
-        else if (gEeprom.CURRENT_STATE == 4 || gEeprom.CURRENT_STATE == 5) {
-            APP_RunSpectrum();
-        }
-        #endif
     #endif
         
     while (true) {

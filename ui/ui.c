@@ -94,9 +94,8 @@ void GUI_SelectNextDisplay(GUI_DisplayType_t Display)
         gAskForConfirmation  = 0;
         gAskToSave           = false;
         gAskToDelete         = false;
-        gWasFKeyPressed      = false;
 
-        gUpdateStatus        = true;
+        HideFKeyIcon();
     }
 
     gScreenToDisplay = Display;

@@ -19,11 +19,23 @@
 #include "screenshot.h"
 #include "misc.h"
 
-void getScreenShot(bool force)
+void SCREENSHOT_Line(uint8_t *src, uint8_t *dest, uint16_t *idx) {
+    for (uint8_t b = 0; b < 8; b++) {
+        for (uint8_t i = 0; i < 128; i += 8) {
+            uint8_t acc = 0;
+            for (uint8_t k = 0; k < 8; k++) {
+                if (src[i + k] & (1 << b)) acc |= (1 << k);
+            }
+            dest[(*idx)++] = gSetting_set_inv ? ~acc : acc;
+        }
+    }
+}
+
+void SCREENSHOT_Update(bool force)
 {
     static uint8_t previousFrame[1024] = {0}; // Last transmitted frame
     static uint8_t forcedBlock = 0;           // Block forced for refresh on each frame
-    static uint8_t keepAlive = 10;            // Keepalive counter
+    static uint8_t keepAlive = 3;             // Keepalive counter
 
     // Use a single buffer to reduce stack usage
     static uint8_t currentFrame[1024];        // Current frame
@@ -39,7 +51,7 @@ void getScreenShot(bool force)
     }
 
     if (UART_IsCableConnected()) {
-        keepAlive = 10;
+        keepAlive = 15;
     }
 
     if (keepAlive > 0) {
@@ -51,31 +63,11 @@ void getScreenShot(bool force)
     }
 
     // Build current frame from status line (first 8 lines)
-    for (uint8_t b = 0; b < 8; b++) {
-        for (uint8_t i = 0; i < 128; i++) {
-            uint8_t bit = (gStatusLine[i] >> b) & 0x01;
-            acc |= (bit << bitCount++);
-            if (bitCount == 8) {
-                currentFrame[index++] = acc;
-                acc = 0;
-                bitCount = 0;
-            }
-        }
-    }
+    SCREENSHOT_Line(gStatusLine, currentFrame, &index);
 
     // Build remaining part of the frame (7 * 8 lines)
     for (uint8_t l = 0; l < 7; l++) {
-        for (uint8_t b = 0; b < 8; b++) {
-            for (uint8_t i = 0; i < 128; i++) {
-                uint8_t bit = (gFrameBuffer[l][i] >> b) & 0x01;
-                acc |= (bit << bitCount++);
-                if (bitCount == 8) {
-                    currentFrame[index++] = acc;
-                    acc = 0;
-                    bitCount = 0;
-                }
-            }
-        }
+        SCREENSHOT_Line(gFrameBuffer[l], currentFrame, &index);
     }
 
     if (bitCount > 0)

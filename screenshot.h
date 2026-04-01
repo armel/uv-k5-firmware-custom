@@ -17,6 +17,6 @@
 #ifndef SCREENSHOT_H
 #define SCREENSHOT_H
 
-void getScreenShot(bool force);
+void SCREENSHOT_Update(bool force);
 
 #endif

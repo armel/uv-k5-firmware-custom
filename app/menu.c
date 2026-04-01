@@ -42,10 +42,6 @@
 #include "ui/menu.h"
 #include "ui/ui.h"
 
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
-
 uint8_t gUnlockAllTxConfCnt;
 
 #ifdef ENABLE_F_CAL_MENU
@@ -878,11 +874,11 @@ void MENU_AcceptSetting(void)
         #endif
 
         case MENU_BATCAL:
-        {                                                                // voltages are averages between discharge curves of 1600 and 2200 mAh
+        {                                                                   // voltages are averages between discharge curves of 1600 and 2200 mAh
             // gBatteryCalibration[0] = (520ul * gSubMenuSelection) / 760;  // 5.20V empty, blinking above this value, reduced functionality below
             // gBatteryCalibration[1] = (689ul * gSubMenuSelection) / 760;  // 6.89V,  ~5%, 1 bars above this value
             // gBatteryCalibration[2] = (724ul * gSubMenuSelection) / 760;  // 7.24V, ~17%, 2 bars above this value
-            gBatteryCalibration[3] =          gSubMenuSelection;         // 7.6V,  ~29%, 3 bars above this value
+            gBatteryCalibration[3] =          gSubMenuSelection;            // 7.6V,  ~29%, 3 bars above this value
             // gBatteryCalibration[4] = (771ul * gSubMenuSelection) / 760;  // 7.71V, ~65%, 4 bars above this value
             // gBatteryCalibration[5] = 2300;
             SETTINGS_SaveBatteryCalibration(gBatteryCalibration);
@@ -930,11 +926,11 @@ void MENU_AcceptSetting(void)
         case MENU_SET_EOT:
             gSetting_set_eot = gSubMenuSelection;
             break;
-#ifdef ENABLE_FEAT_F4HWN_CTR
+        #ifdef ENABLE_FEAT_F4HWN_CTR
         case MENU_SET_CTR:
             gSetting_set_ctr = gSubMenuSelection;
             break;
-#endif
+        #endif
         case MENU_SET_INV:
             gSetting_set_inv = gSubMenuSelection;
             break;
@@ -1377,11 +1373,11 @@ void MENU_ShowCurrentSetting(void)
         case MENU_SET_EOT:
             gSubMenuSelection = gSetting_set_eot;
             break;
-#ifdef ENABLE_FEAT_F4HWN_CTR
+        #ifdef ENABLE_FEAT_F4HWN_CTR
         case MENU_SET_CTR:
             gSubMenuSelection = gSetting_set_ctr;
             break;
-#endif
+        #endif
         case MENU_SET_INV:
             gSubMenuSelection = gSetting_set_inv;
             break;
@@ -1522,10 +1518,12 @@ static void MENU_Key_0_to_9(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         return;
     }
 
-    if (UI_MENU_GetCurrentMenuId() == MENU_MEM_CH ||
-        UI_MENU_GetCurrentMenuId() == MENU_DEL_CH ||
-        UI_MENU_GetCurrentMenuId() == MENU_1_CALL ||
-        UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME)
+    const int m = UI_MENU_GetCurrentMenuId();
+
+    if (m == MENU_MEM_CH ||
+        m == MENU_DEL_CH ||
+        m == MENU_1_CALL ||
+        m == MENU_MEM_NAME)
     {   // enter 3-digit channel number
 
         if (gInputBoxIndex < 3)
@@ -1664,19 +1662,21 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 
     if (!gIsInSubMenu)
     {
+        const int m = UI_MENU_GetCurrentMenuId();
+
         #ifdef ENABLE_VOICE
-            if (UI_MENU_GetCurrentMenuId() != MENU_SCR)
+            if (m != MENU_SCR)
                 gAnotherVoiceID = MenuList[gMenuCursor].voice_id;
         #endif
-        if (UI_MENU_GetCurrentMenuId() == MENU_UPCODE 
-            || UI_MENU_GetCurrentMenuId() == MENU_DWCODE 
+        if (m == MENU_UPCODE 
+            || m == MENU_DWCODE 
 #ifdef ENABLE_DTMF_CALLING 
-            || UI_MENU_GetCurrentMenuId() == MENU_ANI_ID
+            || m == MENU_ANI_ID
 #endif
             )
             return;
         #if 1
-            if (UI_MENU_GetCurrentMenuId() == MENU_DEL_CH || UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME)
+            if (m == MENU_DEL_CH || m == MENU_MEM_NAME)
                 if (!RADIO_CheckValidChannel(gSubMenuSelection, false, 0))
                     return;  // invalid channel
         #endif
@@ -1684,7 +1684,7 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
         gAskForConfirmation = 0;
         gIsInSubMenu        = true;
 
-//      if (UI_MENU_GetCurrentMenuId() != MENU_D_LIST)
+//      if (m != MENU_D_LIST)
         {
             gInputBoxIndex      = 0;
             edit_index          = -1;
@@ -1735,10 +1735,12 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 
     if (gIsInSubMenu)
     {
-        if (UI_MENU_GetCurrentMenuId() == MENU_RESET  ||
-            UI_MENU_GetCurrentMenuId() == MENU_MEM_CH ||
-            UI_MENU_GetCurrentMenuId() == MENU_DEL_CH ||
-            UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME)
+        const int m = UI_MENU_GetCurrentMenuId();
+
+        if (m == MENU_RESET  ||
+            m == MENU_MEM_CH ||
+            m == MENU_DEL_CH ||
+            m == MENU_MEM_NAME)
         {
             switch (gAskForConfirmation)
             {
@@ -1751,7 +1753,7 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
 
                     UI_DisplayMenu();
 
-                    if (UI_MENU_GetCurrentMenuId() == MENU_RESET)
+                    if (m == MENU_RESET)
                     {
                         #ifdef ENABLE_VOICE
                             AUDIO_SetVoiceID(0, VOICE_ID_CONFIRM);
@@ -1825,7 +1827,8 @@ static void MENU_Key_STAR(const bool bKeyPressed, const bool bKeyHeld)
         if (gRxVfo->Modulation ==  MODULATION_FM)
     #endif
     {
-        if ((UI_MENU_GetCurrentMenuId() == MENU_R_CTCS || UI_MENU_GetCurrentMenuId() == MENU_R_DCS) && gIsInSubMenu)
+        const int m = UI_MENU_GetCurrentMenuId();
+        if ((m == MENU_R_CTCS || m == MENU_R_DCS) && gIsInSubMenu)
         {   // scan CTCSS or DCS to find the tone/code of the incoming signal
             if (!SCANNER_IsScanning())
                 MENU_StartCssScan();
@@ -1893,9 +1896,11 @@ static void MENU_Key_UP_DOWN(bool bKeyPressed, bool bKeyHeld, int8_t Direction)
 
         gRequestDisplayScreen = DISPLAY_MENU;
 
-        if (UI_MENU_GetCurrentMenuId() != MENU_ABR
-            && UI_MENU_GetCurrentMenuId() != MENU_ABR_MIN
-            && UI_MENU_GetCurrentMenuId() != MENU_ABR_MAX
+        const int m = UI_MENU_GetCurrentMenuId();
+
+        if (m != MENU_ABR 
+            && m != MENU_ABR_MIN 
+            && m != MENU_ABR_MAX 
             && gEeprom.BACKLIGHT_TIME == 0) // backlight always off and not in the backlight menu
         {
             BACKLIGHT_TurnOff();
@@ -1960,27 +1965,27 @@ void MENU_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 {
     switch (Key)
     {
-        case KEY_0:
-        case KEY_1:
-        case KEY_2:
-        case KEY_3:
-        case KEY_4:
-        case KEY_5:
-        case KEY_6:
-        case KEY_7:
-        case KEY_8:
-        case KEY_9:
+        case KEY_0...KEY_9:
             MENU_Key_0_to_9(Key, bKeyPressed, bKeyHeld);
             break;
         case KEY_MENU:
             MENU_Key_MENU(bKeyPressed, bKeyHeld);
             break;
-        case KEY_UP:
-            MENU_Key_UP_DOWN(bKeyPressed, bKeyHeld,  1);
-            break;
-        case KEY_DOWN:
-            MENU_Key_UP_DOWN(bKeyPressed, bKeyHeld, -1);
-            break;
+            
+        #if defined(ENABLE_FMRADIO) && defined(ENABLE_SPECTRUM) // The size of the Basic version is increasing, while the others are decreasing, so that's why...
+            case KEY_UP:
+                MENU_Key_UP_DOWN(bKeyPressed, bKeyHeld,  1);
+                break;
+            case KEY_DOWN:
+                MENU_Key_UP_DOWN(bKeyPressed, bKeyHeld, -1);
+                break;
+        #else
+            case KEY_UP:
+            case KEY_DOWN:
+                MENU_Key_UP_DOWN(bKeyPressed, bKeyHeld,  Key == KEY_UP ? 1 : -1);
+                break;
+        #endif
+
         case KEY_EXIT:
             MENU_Key_EXIT(bKeyPressed, bKeyHeld);
             break;
@@ -2018,13 +2023,15 @@ void MENU_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             break;
     }
 
+    const int m = UI_MENU_GetCurrentMenuId();
+
     if (gScreenToDisplay == DISPLAY_MENU)
     {
-        if (UI_MENU_GetCurrentMenuId() == MENU_VOL ||
+        if (m == MENU_VOL ||
             #ifdef ENABLE_F_CAL_MENU
-                UI_MENU_GetCurrentMenuId() == MENU_F_CALI ||
+                m == MENU_F_CALI ||
             #endif
-            UI_MENU_GetCurrentMenuId() == MENU_BATCAL)
+            m == MENU_BATCAL)
         {
             gMenuCountdown = menu_timeout_long_500ms;
         }

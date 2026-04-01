@@ -119,14 +119,7 @@ void FUNCTION_Foreground(const FUNCTION_Type_t PreviousFunction)
 
 void FUNCTION_PowerSave() {
     #ifdef ENABLE_FEAT_F4HWN_SLEEP
-        if(gWakeUp)
-        {
-            gPowerSave_10ms = gEeprom.BATTERY_SAVE * 200; // deep sleep now indexed on BatSav
-        }
-        else
-        {
-            gPowerSave_10ms = gEeprom.BATTERY_SAVE * 10;
-        }
+        gPowerSave_10ms = gEeprom.BATTERY_SAVE * (gWakeUp ? 200 : 10); // deep sleep now indexed on BatSav
     #else
         gPowerSave_10ms = gEeprom.BATTERY_SAVE * 10;
     #endif

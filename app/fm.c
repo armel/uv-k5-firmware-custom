@@ -32,10 +32,6 @@
 #include "ui/inputbox.h"
 #include "ui/ui.h"
 
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
-
 uint16_t          gFM_Channels[20];
 bool              gFmRadioMode;
 uint8_t           gFmRadioCountdown_500ms;
@@ -129,6 +125,18 @@ void FM_EraseChannels(void)
     memset(gFM_Channels, 0xFF, sizeof(gFM_Channels));
 }
 
+uint16_t FM_WrapFrequency(uint16_t Frequency) {
+    const uint16_t freqLoLimit = BK1080_GetFreqLoLimit(gEeprom.FM_Band);
+    const uint16_t freqHiLimit = BK1080_GetFreqHiLimit(gEeprom.FM_Band);
+
+    if (Frequency < freqLoLimit)
+        return freqHiLimit;
+    else if (Frequency > freqHiLimit)
+        return freqLoLimit;
+
+    return Frequency;
+}
+
 void FM_Tune(uint16_t Frequency, int8_t Step, bool bFlag)
 {
     AUDIO_AudioPathOff();
@@ -145,10 +153,7 @@ void FM_Tune(uint16_t Frequency, int8_t Step, bool bFlag)
 
     if (!bFlag) {
         Frequency += Step;
-        if (Frequency < BK1080_GetFreqLoLimit(gEeprom.FM_Band))
-            Frequency = BK1080_GetFreqHiLimit(gEeprom.FM_Band);
-        else if (Frequency > BK1080_GetFreqHiLimit(gEeprom.FM_Band))
-            Frequency = BK1080_GetFreqLoLimit(gEeprom.FM_Band);
+        Frequency = FM_WrapFrequency(Frequency);
 
         gEeprom.FM_FrequencyPlaying = Frequency;
     }
@@ -182,65 +187,45 @@ void FM_PlayAndUpdate(void)
 
 int FM_CheckFrequencyLock(uint16_t Frequency, uint16_t LowerLimit)
 {
-    int ret = -1;
-
-    const uint16_t Test2 = BK1080_ReadRegister(BK1080_REG_07);
-
-    // This is supposed to be a signed value, but above function is unsigned
+    const uint16_t Test2     = BK1080_ReadRegister(BK1080_REG_07);
     const uint16_t Deviation = BK1080_REG_07_GET_FREQD(Test2);
 
-    if (BK1080_REG_07_GET_SNR(Test2) <= 2) {
-        BK1080_FrequencyDeviation = Deviation;
-        BK1080_BaseFrequency      = Frequency;
+    // Helper macro to update globals and return
+    #define RETURN(val) \
+        do { \
+            BK1080_FrequencyDeviation = Deviation; \
+            BK1080_BaseFrequency      = Frequency; \
+            return (val); \
+        } while (0)
 
-        return ret;
-    }
+    if (BK1080_REG_07_GET_SNR(Test2) <= 2)
+        RETURN(-1);
 
     const uint16_t Status = BK1080_ReadRegister(BK1080_REG_10);
+    if ((Status & BK1080_REG_10_MASK_AFCRL) != BK1080_REG_10_AFCRL_NOT_RAILED ||
+        BK1080_REG_10_GET_RSSI(Status) < 10)
+        RETURN(-1);
 
-    if ((Status & BK1080_REG_10_MASK_AFCRL) != BK1080_REG_10_AFCRL_NOT_RAILED || BK1080_REG_10_GET_RSSI(Status) < 10) {
-        BK1080_FrequencyDeviation = Deviation;
-        BK1080_BaseFrequency      = Frequency;
+    if (Deviation >= 280 && Deviation <= 3815)
+        RETURN(-1);
 
-        return ret;
-    }
-
-    //if (Deviation > -281 && Deviation < 280)
-    if (Deviation >= 280 && Deviation <= 3815) {
-        BK1080_FrequencyDeviation = Deviation;
-        BK1080_BaseFrequency      = Frequency;
-
-        return ret;
-    }
-
-    // not BLE(less than or equal)
+    // Scanning upward: previous deviation was negative (bit 11 set) or near zero
     if (Frequency > LowerLimit && (Frequency - BK1080_BaseFrequency) == 1) {
-        if (BK1080_FrequencyDeviation & 0x800 || (BK1080_FrequencyDeviation < 20))
-        {
-            BK1080_FrequencyDeviation = Deviation;
-            BK1080_BaseFrequency      = Frequency;
-
-            return ret;
-        }
+        if (BK1080_FrequencyDeviation & 0x800 || BK1080_FrequencyDeviation < 20)
+            RETURN(-1);
     }
 
-    // not BLT(less than)
-
+    // Scanning downward: previous deviation was positive or saturated high
     if (Frequency >= LowerLimit && (BK1080_BaseFrequency - Frequency) == 1) {
-        if ((BK1080_FrequencyDeviation & 0x800) == 0 || (BK1080_FrequencyDeviation > 4075))
-        {
-            BK1080_FrequencyDeviation = Deviation;
-            BK1080_BaseFrequency      = Frequency;
-
-            return ret;
-        }
+        if ((BK1080_FrequencyDeviation & 0x800) == 0 || BK1080_FrequencyDeviation > 4075)
+            RETURN(-1);
     }
 
-    ret = 0;
+    #undef RETURN
+
     BK1080_FrequencyDeviation = Deviation;
     BK1080_BaseFrequency      = Frequency;
-
-    return ret;
+    return 0;
 }
 
 static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
@@ -347,8 +332,7 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
         bool autoScan = gWasFKeyPressed || (state == BUTTON_EVENT_HELD);
 
         gBeepToPlay           = BEEP_1KHZ_60MS_OPTIONAL;
-        gWasFKeyPressed       = false;
-        gUpdateStatus         = true;
+        HideFKeyIcon();
         gRequestDisplayScreen = DISPLAY_FM;
 
         switch (Key) {
@@ -376,7 +360,7 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
                 else
                     gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
                 break;
-            
+
             case KEY_8:
                 ACTION_BackLightOnDemand();
                 break;
@@ -529,10 +513,7 @@ static void Key_UP_DOWN(uint8_t state, int8_t Step)
     else {
         uint16_t Frequency = gEeprom.FM_SelectedFrequency + Step;
 
-        if (Frequency < BK1080_GetFreqLoLimit(gEeprom.FM_Band))
-            Frequency = BK1080_GetFreqHiLimit(gEeprom.FM_Band);
-        else if (Frequency > BK1080_GetFreqHiLimit(gEeprom.FM_Band))
-            Frequency = BK1080_GetFreqLoLimit(gEeprom.FM_Band);
+        Frequency = FM_WrapFrequency(Frequency);
 
         gEeprom.FM_FrequencyPlaying  = Frequency;
         gEeprom.FM_SelectedFrequency = gEeprom.FM_FrequencyPlaying;
@@ -560,12 +541,21 @@ void FM_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         case KEY_MENU:
             Key_MENU(state);
             break;
-        case KEY_UP:
-            Key_UP_DOWN(state, 1);
-            break;
-        case KEY_DOWN:
-            Key_UP_DOWN(state, -1);
-            break;;
+
+        #if defined(ENABLE_FMRADIO) && defined(ENABLE_SPECTRUM) // The size of the Basic version is increasing, while the others are decreasing, so that's why...
+            case KEY_UP:
+                Key_UP_DOWN(state, 1);
+                break;
+            case KEY_DOWN:
+                Key_UP_DOWN(state, -1);
+                break;
+        #else
+            case KEY_UP:
+            case KEY_DOWN:
+                Key_UP_DOWN(state, Key == KEY_UP ? 1 : -1);
+                break;
+        #endif
+        
         case KEY_EXIT:
             Key_EXIT(state);
             break;

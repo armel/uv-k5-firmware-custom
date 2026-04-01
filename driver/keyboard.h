@@ -52,5 +52,7 @@ extern bool       gWasFKeyPressed;
 
 KEY_Code_t KEYBOARD_Poll(void);
 
+void HideFKeyIcon(void);
+
 #endif
 

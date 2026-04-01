@@ -23,7 +23,7 @@
 static uint32_t randSeed = 1;
 static uint8_t blockAnim = 0;
 
-bool isInitialized = false;
+static bool isInitialized = false;
 bool isPaused = false;
 bool isBeep = false;
 
@@ -36,7 +36,7 @@ int16_t ballCount = BALL_NUMBER;
 
 char str[12];
 
-KeyboardState kbd = {KEY_INVALID, KEY_INVALID, 0};
+static KeyboardState kbd = {KEY_INVALID, KEY_INVALID, 0};
 
 Brick brick[BRICK_NUMBER];
 Racket racket;
@@ -421,37 +421,30 @@ bool HandleUserInput()
     
     // Get the current key
     kbd.current = GetKey();
-    
-    // Detect valid key press continuation (same key still pressed)
-    if (kbd.current != KEY_INVALID && kbd.current == kbd.prev)
-    {
-        kbd.counter = 1;
-    }
-    else
-    {
-        kbd.counter = 0;
-    }
-    
-    // Process the key if counter indicates it should be handled
-    if (kbd.counter == 1)
+
+    if (kbd.current == KEY_INVALID)
+        return true;
+
+    // Movement keys: dispatch on every tick while held
+    if (kbd.current == KEY_UP   || kbd.current == KEY_DOWN ||
+        kbd.current == KEY_4    || kbd.current == KEY_0)
     {
         OnKeyDown(kbd.current);
-        
-        // Special handling for MENU key
-        if(kbd.current == KEY_MENU)
-        {
-            kbd.counter = 0;
-            SYSTEM_DelayMs(250);
-        }
+        return true;
     }
-    
+
+    // Action keys (MENU, EXIT): dispatch only on rising edge
+    if (kbd.current != kbd.prev)
+    {
+        OnKeyDown(kbd.current);
+    }
+
     return true;
 }
 
 // Tick
 static void Tick()
 {
-    HandleUserInput();
     HandleUserInput();
 }
 
@@ -482,11 +475,6 @@ void APP_RunBreakout(void) {
                 if(swap == 0)
                 {
                     blockAnim = (blockAnim + 1) % 4;
-
-                    // For screenshot
-                    #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
-                        getScreenShot(false);
-                    #endif
                 }
                 
                 swap = (swap + 1) % 4;
@@ -509,5 +497,12 @@ void APP_RunBreakout(void) {
 
             ST7565_BlitStatusLine();  // Blank status line
             ST7565_BlitFullScreen();
+
+            #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
+                if(isPaused || swap == 0)
+                {
+                    SCREENSHOT_Update(false);
+                }
+            #endif
         }
 }

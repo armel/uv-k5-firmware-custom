@@ -273,18 +273,9 @@ static void HandleReceive(void)
             break;
 
         case CODE_TYPE_CONTINUOUS_TONE:
-            if (gFoundCTCSS && gFoundCTCSSCountdown_10ms == 0)
-            {
-                gFoundCTCSS = false;
-                gFoundCDCSS = false;
-                Mode        = END_OF_RX_MODE_END;
-                goto Skip;
-            }
-            break;
-
         case CODE_TYPE_DIGITAL:
         case CODE_TYPE_REVERSE_DIGITAL:
-            if (gFoundCDCSS && gFoundCDCSSCountdown_10ms == 0)
+            if ((gFoundCTCSS && gFoundCTCSSCountdown_10ms == 0) || (gFoundCDCSS && gFoundCDCSSCountdown_10ms == 0))
             {
                 gFoundCTCSS = false;
                 gFoundCDCSS = false;
@@ -544,7 +535,17 @@ void APP_StartListening(FUNCTION_Type_t function)
         gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
     {   // not scanning, dual watch is enabled
 
-        gDualWatchCountdown_10ms = dual_watch_count_after_2_10ms;
+        //gDualWatchCountdown_10ms = dual_watch_count_after_2_10ms;
+
+        const bool isMainTxDualRx =
+        (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) &&
+        (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF);
+
+        // Use a short hold only for MAIN TX DUAL RX, keep legacy hold otherwise
+        gDualWatchCountdown_10ms = isMainTxDualRx
+            ? dual_watch_count_after_2_10ms / 4 // Short timer = 420 / 4 ...
+            : dual_watch_count_after_2_10ms;
+
         gScheduleDualWatch       = false;
 
         // when crossband is active only the main VFO should be used for TX
@@ -1125,14 +1126,7 @@ void APP_Update(void)
             // go back to sleep
 
 #ifdef ENABLE_FEAT_F4HWN_SLEEP
-            if(gWakeUp)
-            {
-                gPowerSave_10ms = gEeprom.BATTERY_SAVE * 200; // deep sleep now indexed on BatSav
-            }
-            else
-            {
-                gPowerSave_10ms = gEeprom.BATTERY_SAVE * 10;
-            }
+            gPowerSave_10ms = gEeprom.BATTERY_SAVE * (gWakeUp ? 200 : 10); // deep sleep now indexed on BatSav
 #else
             gPowerSave_10ms = gEeprom.BATTERY_SAVE * 10;
 #endif
@@ -1157,8 +1151,21 @@ void APP_Update(void)
     }
 }
 
+void StopTransmitting(void) {
+    ProcessKey(KEY_PTT, false, false);
+    gPttIsPressed = false;
+    if (gKeyReading1 != KEY_INVALID)
+        gPttWasReleased = true;
+
+    #ifdef ENABLE_FEAT_F4HWN
+        #if defined(ENABLE_FEAT_F4HWN_CTR) || defined(ENABLE_FEAT_F4HWN_INV)
+        ST7565_ContrastAndInv();
+        #endif
+    #endif
+}
+
 // called every 10ms
-static void CheckKeys(void)
+void CheckKeys(void)
 {
 #ifdef ENABLE_DTMF_CALLING
     if(gSetting_KILLED){
@@ -1173,75 +1180,58 @@ static void CheckKeys(void)
 #endif
 
 // -------------------- PTT ------------------------
+    const bool serialConfigInProgress = SerialConfigInProgress();
+    const bool isPressed = !GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !serialConfigInProgress;
+
 #ifdef ENABLE_FEAT_F4HWN
     if (gSetting_set_ptt_session)
     {
-        if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress() && gPttOnePushCounter == 0)
-        {   // PTT pressed
-            if (++gPttDebounceCounter >= 3)     // 30ms
-            {   // start transmitting
-                boot_counter_10ms   = 0;
+        if ((isPressed && (gPttOnePushCounter == 0 || gPttOnePushCounter == 2)) ||
+            (!isPressed && (gPttOnePushCounter == 1 || gPttOnePushCounter == 3)) ||
+            serialConfigInProgress) 
+        {
+            if (++gPttDebounceCounter >= 3 || (serialConfigInProgress && gPttOnePushCounter > 0))
+            {
                 gPttDebounceCounter = 0;
-                gPttIsPressed       = true;
-                gPttOnePushCounter = 1;
-                ProcessKey(KEY_PTT, true, false);
+                
+                if (gPttOnePushCounter == 0)
+                {   // start transmitting
+                    boot_counter_10ms   = 0;
+                    gPttIsPressed       = true;
+                    gPttOnePushCounter = 1;
+                    ProcessKey(KEY_PTT, true, false);
+                } 
+                else if (gPttOnePushCounter == 3 || serialConfigInProgress)
+                {   // stop transmitting
+                    StopTransmitting();
+                    gPttOnePushCounter = 0;
+                } 
+                else
+                    gPttOnePushCounter++;
             }
-        }
-        else if ((GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress()) && gPttOnePushCounter == 1)
-        {   
-            // PTT released or serial comms config in progress
-            if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())     // 30ms
-            {   // stop transmitting
-                gPttOnePushCounter = 2;
-            }
-        }
-        else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress() && gPttOnePushCounter == 2)
-        {   // PTT pressed again            
-            if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())     // 30ms
-            {   // stop transmitting
-                gPttOnePushCounter = 3;
-            }
-        }
-        else if ((GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress()) && gPttOnePushCounter == 3)
-        {   // PTT released or serial comms config in progress
-            if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())     // 30ms
-            {   // stop transmitting
-                ProcessKey(KEY_PTT, false, false);
-                gPttIsPressed = false;
-                if (gKeyReading1 != KEY_INVALID)
-                    gPttWasReleased = true;
-                gPttOnePushCounter = 0;
-                #if defined(ENABLE_FEAT_F4HWN_CTR) || defined(ENABLE_FEAT_F4HWN_INV)
-                ST7565_ContrastAndInv();
-                #endif
-            }
-        }
+        } 
         else
             gPttDebounceCounter = 0;
 
         //gDebug = gPttOnePushCounter;
-    }
-    else
+    } 
+    else 
+#endif
     {
         if (gPttIsPressed)
         {
-            if (GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress())
+            if (!isPressed)
             {   // PTT released or serial comms config in progress
-                if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())     // 30ms
+                if (++gPttDebounceCounter >= 3 || serialConfigInProgress)   // 30ms
                 {   // stop transmitting
-                    ProcessKey(KEY_PTT, false, false);
-                    gPttIsPressed = false;
-                    if (gKeyReading1 != KEY_INVALID)
-                        gPttWasReleased = true;
-                    #if defined(ENABLE_FEAT_F4HWN_CTR) || defined(ENABLE_FEAT_F4HWN_INV)
-                    ST7565_ContrastAndInv();
-                    #endif
+                    gPttDebounceCounter = 0;
+                    StopTransmitting();
                 }
-            }
-            else
+            } 
+            else 
                 gPttDebounceCounter = 0;
         }
-        else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress())
+        else if (isPressed)
         {   // PTT pressed
             if (++gPttDebounceCounter >= 3)     // 30ms
             {   // start transmitting
@@ -1252,37 +1242,8 @@ static void CheckKeys(void)
             }
         }
         else
-            gPttDebounceCounter = 0;        
-    }
-#else
-    if (gPttIsPressed)
-    {
-        if (GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) || SerialConfigInProgress())
-        {   // PTT released or serial comms config in progress
-            if (++gPttDebounceCounter >= 3 || SerialConfigInProgress())     // 30ms
-            {   // stop transmitting
-                ProcessKey(KEY_PTT, false, false);
-                gPttIsPressed = false;
-                if (gKeyReading1 != KEY_INVALID)
-                    gPttWasReleased = true;
-            }
-        }
-        else
             gPttDebounceCounter = 0;
     }
-    else if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT) && !SerialConfigInProgress())
-    {   // PTT pressed
-        if (++gPttDebounceCounter >= 3)     // 30ms
-        {   // start transmitting
-            boot_counter_10ms   = 0;
-            gPttDebounceCounter = 0;
-            gPttIsPressed       = true;
-            ProcessKey(KEY_PTT, true, false);
-        }
-    }
-    else
-        gPttDebounceCounter = 0;
-#endif
 
 // --------------------- OTHER KEYS ----------------------------
 
@@ -1399,7 +1360,7 @@ void APP_TimeSlice10ms(void)
 
     #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
     if (gUpdateDisplayCurrent || gUpdateStatusCurrent) {
-        getScreenShot(false);
+        SCREENSHOT_Update(false);
     }
     #endif
 
@@ -1446,8 +1407,7 @@ void APP_TimeSlice10ms(void)
                 if (gAlarmState == ALARM_STATE_TXALARM) {
                     gAlarmState = ALARM_STATE_SITE_ALARM;
 
-                    if(gEeprom.TAIL_TONE_ELIMINATION)
-                        RADIO_SendCssTail();
+                    RADIO_SendCssTail();
                     BK4819_SetupPowerAmplifier(0, 0);
                     BK4819_ToggleGpioOut(BK4819_GPIO1_PIN29_PA_ENABLE, false);
                     BK4819_Enable_AfDac_DiscMode_TxDsp();
@@ -1512,17 +1472,16 @@ void cancelUserInputModes(void)
     if (gDTMF_InputMode || gDTMF_InputBox_Index > 0)
     {
         DTMF_clear_input_box();
-        gBeepToPlay           = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         gRequestDisplayScreen = DISPLAY_MAIN;
         gUpdateDisplay        = true;
     }
 
     if (gWasFKeyPressed || gKeyInputCountdown > 0 || gInputBoxIndex > 0)
     {
-        gWasFKeyPressed     = false;
+        HideFKeyIcon();
+
         gInputBoxIndex      = 0;
         gKeyInputCountdown  = 0;
-        gUpdateStatus       = true;
         gUpdateDisplay      = true;
     }
 }
@@ -1554,6 +1513,7 @@ void APP_TimeSlice500ms(void)
             }
 
             cancelUserInputModes();
+            gHasVfoBackup = false;
         }
     }
 
@@ -1596,9 +1556,11 @@ void APP_TimeSlice500ms(void)
     }
 #endif
 
+    const int m = UI_MENU_GetCurrentMenuId();
+
     if (gBacklightCountdown_500ms > 0 && !gAskToSave && !gCssBackgroundScan
         // don't turn off backlight if user is in backlight menu option
-        && !(gScreenToDisplay == DISPLAY_MENU && (UI_MENU_GetCurrentMenuId() == MENU_ABR || UI_MENU_GetCurrentMenuId() == MENU_ABR_MAX))
+        && !(gScreenToDisplay == DISPLAY_MENU && (m == MENU_ABR || m == MENU_ABR_MAX || m == MENU_ABR_MIN))
         && --gBacklightCountdown_500ms == 0
         && gEeprom.BACKLIGHT_TIME < 61
     ) {
@@ -1631,11 +1593,13 @@ void APP_TimeSlice500ms(void)
         {
             if(gSleepModeCountdown_500ms % 4 == 0)
             {
-                PWM_PLUS0_CH0_COMP = value[gEeprom.BACKLIGHT_MAX] * 4; // Max brightness
+                // PWM_PLUS0_CH0_COMP = value[gEeprom.BACKLIGHT_MAX] * 4; // Max brightness
+                BACKLIGHT_SetBrightness(gEeprom.BACKLIGHT_MAX);
             }
             else
             {
-                PWM_PLUS0_CH0_COMP = 0;
+                // PWM_PLUS0_CH0_COMP = 0;
+                BACKLIGHT_SetBrightness(0);
             }
         }
     }
@@ -1712,8 +1676,10 @@ void APP_TimeSlice500ms(void)
         if (exit_menu) {
             gMenuCountdown = 0;
 
-            if (gEeprom.BACKLIGHT_TIME == 0) {
-                BACKLIGHT_TurnOff();
+            const int m = UI_MENU_GetCurrentMenuId();
+
+            if (gScreenToDisplay == DISPLAY_MENU && (m == MENU_ABR || m == MENU_ABR_MAX || m == MENU_ABR_MIN)) {
+                BACKLIGHT_TurnOn();
             }
 
             if (gInputBoxIndex > 0 || gDTMF_InputMode) {
@@ -1731,13 +1697,12 @@ void APP_TimeSlice500ms(void)
 */
             DTMF_clear_input_box();
 
-            gWasFKeyPressed  = false;
+            HideFKeyIcon();
             gInputBoxIndex   = 0;
 
             gAskToSave       = false;
             gAskToDelete     = false;
 
-            gUpdateStatus    = true;
             gUpdateDisplay   = true;
 
             GUI_DisplayType_t disp = DISPLAY_INVALID;
@@ -1916,7 +1881,7 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
             // cancel user input
             cancelUserInputModes();
-            gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+            gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
 
             if (gMonitor)
                 ACTION_Monitor(); //turn off the monitor
@@ -2029,8 +1994,7 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     if (gWasFKeyPressed && (Key == KEY_PTT || Key == KEY_EXIT || Key == KEY_SIDE1 || Key == KEY_SIDE2)) { 
 #endif
         // cancel the F-key
-        gWasFKeyPressed = false;
-        gUpdateStatus   = true;
+        HideFKeyIcon();
     }
 
     if (bFlag) {
@@ -2107,18 +2071,14 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         }
 #endif
     }
+    else if (gScreenToDisplay != DISPLAY_INVALID && (
+            (Key != KEY_SIDE1 && Key != KEY_SIDE2)
 #ifdef ENABLE_FEAT_F4HWN // For F + SIDE1 or F + SIDE2
-    else if (gWasFKeyPressed && (Key == KEY_SIDE1 || Key == KEY_SIDE2)) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
-    else if (Key != KEY_SIDE1 && Key != KEY_SIDE2 && gScreenToDisplay != DISPLAY_INVALID) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
-#else
-    else if (Key != KEY_SIDE1 && Key != KEY_SIDE2 && gScreenToDisplay != DISPLAY_INVALID) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
+            || (gWasFKeyPressed && (Key == KEY_SIDE1 || Key == KEY_SIDE2))
 #endif
+    )) {
+        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
+    }
     else if (!SCANNER_IsScanning()
 #ifdef ENABLE_AIRCOPY
             && gScreenToDisplay != DISPLAY_AIRCOPY
@@ -2173,7 +2133,7 @@ Skip:
     }
 
     if (gRequestSaveChannel > 0) { // TODO: remove the gRequestSaveChannel, why use global variable for that??
-        if ((!bKeyHeld && !bKeyPressed) || UI_MENU_GetCurrentMenuId())
+        if ((!bKeyHeld && !bKeyPressed) || (UI_MENU_GetCurrentMenuId() != 0 && gScreenToDisplay == DISPLAY_MENU) || gScreenToDisplay == DISPLAY_SCANNER)
         {
             SETTINGS_SaveChannel(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, gTxVfo, gRequestSaveChannel);
 

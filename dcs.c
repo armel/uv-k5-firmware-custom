@@ -15,10 +15,7 @@
  */
 
 #include "dcs.h"
-
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
+#include "misc.h"
 
 // CTCSS Hz * 10
 const uint16_t CTCSS_Options[50] = {

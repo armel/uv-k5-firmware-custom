@@ -62,8 +62,10 @@ BOOT_Mode_t BOOT_GetMode(void)
             return BOOT_MODE_F_LOCK;
 
         #ifdef ENABLE_AIRCOPY
-            if (Keys[0] == KEY_SIDE2)
+            if (Keys[0] == KEY_SIDE2) {
+                gAirCopyBootMode = true;
                 return BOOT_MODE_AIRCOPY;
+            }
         #endif
     }
 

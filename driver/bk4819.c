@@ -18,6 +18,7 @@
 #include <stdio.h>
 
 #include "settings.h"
+#include "misc.h"
 
 #include "../audio.h"
 #include "../bsp/dp32g030/gpio.h"
@@ -27,11 +28,6 @@
 #include "gpio.h"
 #include "system.h"
 #include "systick.h"
-
-
-#ifndef ARRAY_SIZE
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
-#endif
 
 static const uint16_t FSK_RogerTable[7] = {0xF1A2, 0x7446, 0x61A4, 0x6544, 0x4E8A, 0xE044, 0xEA84};
 

@@ -3,6 +3,7 @@
 #include "functions.h"
 #include "misc.h"
 #include "settings.h"
+#include "ui/inputbox.h"
 #include "ui/ui.h"
 
 void COMMON_KeypadLockToggle() 
@@ -29,6 +30,11 @@ void COMMON_SwitchVFOs()
 #endif
     gEeprom.TX_VFO ^= 1;
 
+    if (gInputBoxIndex > 0) {
+        gInputBoxIndex = 0;
+        gHasVfoBackup = false;
+    }
+
     if (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF)
         gEeprom.CROSS_BAND_RX_TX = gEeprom.TX_VFO + 1;
     if (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF)
@@ -49,6 +55,11 @@ void COMMON_SwitchVFOMode()
     if (gEeprom.VFO_OPEN)
 #endif
     {
+        if (gInputBoxIndex > 0) {
+            gInputBoxIndex = 0;
+            gHasVfoBackup = false;
+        }
+
         if (IS_MR_CHANNEL(gTxVfo->CHANNEL_SAVE))
         {   // swap to frequency mode
             gEeprom.ScreenChannel[gEeprom.TX_VFO] = gEeprom.FreqChannel[gEeprom.TX_VFO];

@@ -155,28 +155,34 @@ void UI_DisplayStatus()
             else
         #endif
             {
-                #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
-                if(gEeprom.MENU_LOCK == true) {
-                    memcpy(line + x + 2, gFontRO, sizeof(gFontRO));
-                }
-                else
-                {
+                #ifdef ENABLE_AIRCOPY
+                if(!gAirCopyBootMode) {
                 #endif
-                    uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
-                    if(dw == 1 || dw == 3) { // DWR - dual watch + respond
-                        if(gDualWatchActive)
-                            memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
-                        else
-                            memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
-                    }
-                    else if(dw == 2) { // XB - crossband
-                        memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
+                    #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+                    if(gEeprom.MENU_LOCK == true) {
+                        memcpy(line + x + 2, gFontRO, sizeof(gFontRO));
                     }
                     else
                     {
-                        memcpy(line + x + 2, gFontMO, sizeof(gFontMO));
+                    #endif
+                        uint8_t dw = (gEeprom.DUAL_WATCH != DUAL_WATCH_OFF) + (gEeprom.CROSS_BAND_RX_TX != CROSS_BAND_OFF) * 2;
+                        if(dw == 1 || dw == 3) { // DWR - dual watch + respond
+                            if(gDualWatchActive)
+                                memcpy(line + x + (dw==1?0:2), gFontDWR, sizeof(gFontDWR) - (dw==1?0:5));
+                            else
+                                memcpy(line + x + 3, gFontHold, sizeof(gFontHold));
+                        }
+                        else if(dw == 2) { // XB - crossband
+                            memcpy(line + x + 2, gFontXB, sizeof(gFontXB));
+                        }
+                        else
+                        {
+                            memcpy(line + x + 2, gFontMO, sizeof(gFontMO));
+                        }
+                    #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
                     }
-                #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
+                    #endif
+                #ifdef ENABLE_AIRCOPY
                 }
                 #endif
             }
@@ -195,15 +201,22 @@ void UI_DisplayStatus()
 
 #ifdef ENABLE_FEAT_F4HWN
     // PTT indicator
-    if (gSetting_set_ptt_session) {
-        memcpy(line + x, gFontPttOnePush, sizeof(gFontPttOnePush));
-        x1 = x + sizeof(gFontPttOnePush) + 1;
+    #ifdef ENABLE_AIRCOPY
+    if(!gAirCopyBootMode) {
+    #endif
+        if (gSetting_set_ptt_session) {
+            memcpy(line + x, gFontPttOnePush, sizeof(gFontPttOnePush));
+            x1 = x + sizeof(gFontPttOnePush) + 1;
+        }
+        else
+        {
+            memcpy(line + x, gFontPttClassic, sizeof(gFontPttClassic));
+            x1 = x + sizeof(gFontPttClassic) + 1;       
+        }
+    #ifdef ENABLE_AIRCOPY
     }
-    else
-    {
-        memcpy(line + x, gFontPttClassic, sizeof(gFontPttClassic));
-        x1 = x + sizeof(gFontPttClassic) + 1;       
-    }
+    #endif
+    
     x += sizeof(gFontPttClassic) + 3;
 #endif
 
@@ -218,15 +231,8 @@ void UI_DisplayStatus()
         size = sizeof(gFontKeyLock);
     }
     else if (gWasFKeyPressed) {
-        #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
-        if (!gEeprom.MENU_LOCK) {
-            src = gFontF;
-            size = sizeof(gFontF);
-        }
-        #else
         src = gFontF;
         size = sizeof(gFontF);
-        #endif
     }
     #ifdef ENABLE_FEAT_F4HWN
         else if (gMute) {

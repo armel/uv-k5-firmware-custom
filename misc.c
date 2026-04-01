@@ -136,9 +136,12 @@ enum BacklightOnRxTx_t gSetting_backlight_on_tx_rx;
     uint8_t       gDW = 0;
     uint8_t       gCB = 0;
     bool          gSaveRxMode = false;
-    uint8_t       crc[15] = { 0 };
-    uint8_t       lErrorsDuringAirCopy = 0;
-    uint8_t       gAircopyStep = 0;
+    #ifdef ENABLE_AIRCOPY
+        uint8_t       crc[15] = { 0 };
+        uint8_t       lErrorsDuringAirCopy = 0;
+        uint8_t       gAircopyStep = 0;
+        bool          gAirCopyBootMode = 0;
+    #endif
     #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
         bool          gPowerHigh = false;
         bool          gRemoveOffset = false;
@@ -229,6 +232,7 @@ volatile uint16_t gScanPauseDelayIn_10ms;
 uint16_t          gMenuCountdown;
 bool              gPttWasReleased;
 bool              gPttWasPressed;
+bool              gHasVfoBackup;
 uint8_t           gKeypadLocked;
 bool              gFlagReconfigureVfos;
 uint8_t           gVfoConfigureMode;

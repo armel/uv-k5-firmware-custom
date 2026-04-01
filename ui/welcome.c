@@ -204,7 +204,7 @@ void UI_DisplayWelcome(void)
         ST7565_BlitFullScreen();
 
         #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
-            getScreenShot(true);
+            SCREENSHOT_Update(true);
         #endif
     }
 }

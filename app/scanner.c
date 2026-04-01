@@ -275,10 +275,8 @@ void SCANNER_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             SCANNER_Key_MENU(bKeyPressed, bKeyHeld);
             break;
         case KEY_UP:
-            SCANNER_Key_UP_DOWN(bKeyPressed, bKeyHeld,  1);
-            break;
         case KEY_DOWN:
-            SCANNER_Key_UP_DOWN(bKeyPressed, bKeyHeld, -1);
+            SCANNER_Key_UP_DOWN(bKeyPressed, bKeyHeld, Key == KEY_UP ? 1 : -1);
             break;
         case KEY_EXIT:
             SCANNER_Key_EXIT(bKeyPressed, bKeyHeld);

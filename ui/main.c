@@ -79,7 +79,7 @@ const char *VfoStateStr[] = {
        [VFO_STATE_VOLTAGE_HIGH]="VOLT HIGH"
 };
 
-// ***************************************************************************
+// ----------------------------------------
 
 static void DrawSmallAntennaAndBars(uint8_t *p, unsigned int level)
 {
@@ -326,22 +326,34 @@ void DisplayRSSIBar(const bool now)
 #endif
         + dBmCorrTable[gRxVfo->Band];
 
-    rssi_dBm = -rssi_dBm;
-
-    if(rssi_dBm > 141) rssi_dBm = 141;
-    if(rssi_dBm < 53) rssi_dBm = 53;
-
-    uint8_t s_level = 0;
-    uint8_t overS9dBm = 0;
+    // IARU VHF/UHF S-meter: S9 = -93 dBm, 1 S-unit = 6 dB
+    // S(n) threshold = -93 + (n - 9) * 6
+    uint8_t s_level    = 0;
+    uint8_t overS9dBm  = 0;
     uint8_t overS9Bars = 0;
 
-    if(rssi_dBm >= 93) {
-        s_level = map(rssi_dBm, 141, 93, 1, 9);
-    }
-    else {
+    // if      (rssi_dBm >= -93)  s_level = 9;  // S9  = -93 dBm
+    // else if (rssi_dBm >= -99)  s_level = 8;  // S8  = -99 dBm
+    // else if (rssi_dBm >= -105) s_level = 7;  // S7  = -105 dBm
+    // else if (rssi_dBm >= -111) s_level = 6;  // S6  = -111 dBm
+    // else if (rssi_dBm >= -117) s_level = 5;  // S5  = -117 dBm
+    // else if (rssi_dBm >= -123) s_level = 4;  // S4  = -123 dBm
+    // else if (rssi_dBm >= -129) s_level = 3;  // S3  = -129 dBm
+    // else if (rssi_dBm >= -135) s_level = 2;  // S2  = -135 dBm
+    // else if (rssi_dBm >= -141) s_level = 1;  // S1  = -141 dBm
+    // else                       s_level = 0;  // S0 (below -141 dBm)
+
+    if (rssi_dBm >= -93)
         s_level = 9;
-        overS9dBm = map(rssi_dBm, 93, 53, 0, 40);
-        overS9Bars = map(overS9dBm, 0, 40, 0, 4);
+    else if (rssi_dBm < -141)
+        s_level = 0;
+    else 
+        s_level = (rssi_dBm + 147) / 6;
+
+    if (s_level == 9) {
+        // Compute over-S9 dB directly
+        overS9dBm  = (uint8_t)MIN(rssi_dBm - (-93), 40);
+        overS9Bars = overS9dBm / 10;
     }
 #else
     const int16_t s0_dBm   = -gEeprom.S0_LEVEL;                  // S0 .. base level
@@ -361,12 +373,12 @@ void DisplayRSSIBar(const bool now)
 #ifdef ENABLE_FEAT_F4HWN
     if (gSetting_set_gui)
     {
-        sprintf(str, "%3d", -rssi_dBm);
+        sprintf(str, "%3d", rssi_dBm);
         UI_PrintStringSmallNormal(str, LCD_WIDTH + 8, 0, line - 1);
     }
     else
     {
-        sprintf(str, "% 4d %s", -rssi_dBm, "dBm");
+        sprintf(str, "% 4d %s", rssi_dBm, "dBm");
         if(isMainOnly())
             GUI_DisplaySmallest(str, 2, 41, false, true);
         else
@@ -523,7 +535,7 @@ void UI_MAIN_TimeSlice500ms(void)
     }
 }
 
-// ***************************************************************************
+// ----------------------------------------
 
 void UI_DisplayMain(void)
 {
@@ -549,32 +561,7 @@ void UI_DisplayMain(void)
         return;
     }
 #else
-    if (gEeprom.KEY_LOCK && gKeypadLocked > 0)
-    {   // tell user how to unlock the keyboard
-        uint8_t shift = 3;
-
-        /*
-        BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true);
-        SYSTEM_DelayMs(50);
-        BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
-        SYSTEM_DelayMs(50);
-        */
-
-        if(isMainOnly())
-        {
-            shift = 5;
-        }
-        //memcpy(gFrameBuffer[shift] + 2, gFontKeyLock, sizeof(gFontKeyLock));
-        UI_PrintStringSmallBold("UNLOCK KEYBOARD", 12, 0, shift);
-        //memcpy(gFrameBuffer[shift] + 120, gFontKeyLock, sizeof(gFontKeyLock));
-
-        /*
-        for (uint8_t i = 12; i < 116; i++)
-        {
-            gFrameBuffer[shift][i] ^= 0xFF;
-        }
-        */
-    }
+    UI_DisplayUnlockKeyboard(isMainOnly() ? 5 : 3);
 #endif
 
     unsigned int activeTxVFO = gRxVfoIsActive ? gEeprom.RX_VFO : gEeprom.TX_VFO;
@@ -736,7 +723,7 @@ void UI_DisplayMain(void)
 
         uint32_t frequency = gEeprom.VfoInfo[vfo_num].pRX->Frequency;
 
-        if(TX_freq_check(frequency) != 0 && gEeprom.VfoInfo[vfo_num].TX_LOCK == true)
+        if(TX_freq_check(frequency) != 0 && gEeprom.VfoInfo[vfo_num].TX_LOCK == true && !FUNCTION_IsRx())
         {
             if(isMainOnly())
                 memcpy(p_line0 + 14, BITMAP_VFO_Lock, sizeof(BITMAP_VFO_Lock));
@@ -764,29 +751,27 @@ void UI_DisplayMain(void)
         {   // receiving .. show the RX symbol
             mode = VFO_MODE_RX;
             //if (FUNCTION_IsRx() && gEeprom.RX_VFO == vfo_num) {
-            if (FUNCTION_IsRx() && gEeprom.RX_VFO == vfo_num && VfoState[vfo_num] == VFO_STATE_NORMAL) {
+            if (FUNCTION_IsRx()) {
+                if (gEeprom.RX_VFO == vfo_num && VfoState[vfo_num] == VFO_STATE_NORMAL) {
 #ifdef ENABLE_FEAT_F4HWN
-                RxBlinkLed = 1;
-                RxBlinkLedCounter = 0;
-                RxLine = line;
-                RxOnVfofrequency = frequency;
-                if(!isMainVFO)
-                {
-                    RxBlink = 1;
-                }
-                else
-                {
-                    RxBlink = 0;
-                }
+                    RxBlinkLed = 1;
+                    RxBlinkLedCounter = 0;
+                    RxLine = line;
+                    RxOnVfofrequency = frequency;
+
+                    RxBlink = !isMainVFO;
 #else
-                UI_PrintStringSmallBold("RX", 8, 0, line);
+                    UI_PrintStringSmallBold("RX", 8, 0, line);
 #endif
-            }
+                }
 #ifdef ENABLE_FEAT_F4HWN
-            else
-            {
-                if(RxOnVfofrequency == frequency && !isMainOnly())
-                {
+                else {
+                    if(RxBlinkLed == 1)
+                        RxBlinkLed = 2;
+                }
+            }
+            else {
+                if(RxOnVfofrequency == frequency && !isMainOnly()) {
                     UI_PrintStringSmallNormal(">>", 8, 0, line);
                     //memcpy(p_line0 + 14, BITMAP_VFO_Default, sizeof(BITMAP_VFO_Default));
                 }
@@ -801,7 +786,7 @@ void UI_DisplayMain(void)
         {   // channel mode
             const unsigned int x = 2;
             const bool inputting = gInputBoxIndex != 0 && gEeprom.TX_VFO == vfo_num;
-            if (!inputting)
+            if (!inputting || gScanStateDir != SCAN_OFF)
                 sprintf(String, "M%u", gEeprom.ScreenChannel[vfo_num] + 1);
             else
                 sprintf(String, "M%.3s", INPUTBOX_GetAscii());  // show the input text
@@ -830,7 +815,7 @@ void UI_DisplayMain(void)
         }
 #endif
 
-        // ************
+        // ----------------------------------------
 
         enum VfoState_t state = VfoState[vfo_num];
 
@@ -1053,7 +1038,7 @@ void UI_DisplayMain(void)
             }
         }
 
-        // ************
+        // ----------------------------------------
 
         {   // show the TX/RX level
             int8_t Level = -1;
@@ -1080,9 +1065,15 @@ void UI_DisplayMain(void)
                     Level = 2;
                 }
                 */
-                Level = gRxVfo->OUTPUT_POWER - 1;
+
+                uint8_t currentPower = gRxVfo->OUTPUT_POWER;
+
+                if(currentPower == OUTPUT_POWER_USER)
+                    Level = gSetting_set_pwr;
+                else
+                    Level = currentPower - 1;
             }
-            else
+            else 
             if (mode == VFO_MODE_RX)
             {   // RX signal level
                 #ifndef ENABLE_RSSI_BAR
@@ -1095,7 +1086,7 @@ void UI_DisplayMain(void)
                 DrawSmallAntennaAndBars(p_line1 + LCD_WIDTH, Level);
         }
 
-        // ************
+        // ----------------------------------------
 
         String[0] = '\0';
         const VFO_Info_t *vfoInfo = &gEeprom.VfoInfo[vfo_num];
@@ -1139,11 +1130,8 @@ void UI_DisplayMain(void)
             break;
 
             case 2:
-            sprintf(String, "%03oN", DCS_Options[pConfig->Code]);
-            break;
-
             case 3:
-            sprintf(String, "%03oI", DCS_Options[pConfig->Code]);
+            sprintf(String, (int)pConfig->CodeType == 2 ? "%03oN" : "%03oI", DCS_Options[pConfig->Code]);
             break;
 
             default:
@@ -1426,7 +1414,7 @@ void UI_DisplayMain(void)
         if (rx || gCurrentFunction == FUNCTION_FOREGROUND || gCurrentFunction == FUNCTION_POWER_SAVE)
         {
             #if 1
-                if (gSetting_live_DTMF_decoder && gDTMF_RX_live[0] != 0)
+                if (gSetting_live_DTMF_decoder && gDTMF_RX_live[0] != 0 && gKeypadLocked == 0)
                 {   // show live DTMF decode
                     const unsigned int len = strlen(gDTMF_RX_live);
                     const unsigned int idx = (len > (17 - 5)) ? len - (17 - 5) : 0;  // limit to last 'n' chars
@@ -1514,5 +1502,3 @@ void UI_DisplayMain(void)
 
     ST7565_BlitFullScreen();
 }
-
-// ***************************************************************************

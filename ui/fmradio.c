@@ -35,6 +35,10 @@ void UI_DisplayFM(void)
     char *pPrintStr = String;
     UI_DisplayClear();
 
+#ifdef ENABLE_FEAT_F4HWN
+    UI_DisplayUnlockKeyboard(5);
+#endif
+
     UI_PrintString("FM", 2, 0, 0, 8);
 
     sprintf(String, "%d%s-%dM", 

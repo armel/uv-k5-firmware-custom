@@ -68,7 +68,7 @@ bool RADIO_CheckValidChannel(uint16_t channel, bool checkScanList, uint8_t scanL
     if (att.band > BAND7_470MHz)
         return false;
 
-    if (!checkScanList || scanList > 4)
+    if (!checkScanList || scanList > 8)
         return true;
 
     /*
@@ -98,18 +98,24 @@ bool RADIO_CheckValidChannel(uint16_t channel, bool checkScanList, uint8_t scanL
         (scanList == 1 && att.scanlist1 != 1) ||
         (scanList == 2 && att.scanlist2 != 1) ||
         (scanList == 3 && att.scanlist3 != 1) ||
-        (scanList == 4 && (att.scanlist1 == 0 && att.scanlist2 == 0 && att.scanlist3 == 0))) {
+        (scanList == 4 && (att.scanlist1 != 1 && att.scanlist2 != 1)) || /* 1+2 */
+        (scanList == 5 && (att.scanlist1 != 1 && att.scanlist3 != 1)) || /* 1+3 */
+        (scanList == 6 && (att.scanlist2 != 1 && att.scanlist3 != 1)) || /* 2+3 */
+        (scanList == 7 && (att.scanlist1 == 0 && att.scanlist2 == 0 && att.scanlist3 == 0)) /* 1|2|3 */) {
         return false;
     }
 
     //return true;
 
     // I don't understand what this code is for...
-    
-    const uint8_t PriorityCh1 = gEeprom.SCANLIST_PRIORITY_CH1[scanList - 1];
-    const uint8_t PriorityCh2 = gEeprom.SCANLIST_PRIORITY_CH2[scanList - 1];
+    // Exclude the priority channels when scanning an individual list (1..3)
+    if (scanList >= 1 && scanList <= 3) {
+        const uint8_t PriorityCh1 = gEeprom.SCANLIST_PRIORITY_CH1[scanList - 1];
+        const uint8_t PriorityCh2 = gEeprom.SCANLIST_PRIORITY_CH2[scanList - 1];
+        return PriorityCh1 != channel && PriorityCh2 != channel;
+    }
 
-    return PriorityCh1 != channel && PriorityCh2 != channel;
+    return true;
 }
 
 uint8_t RADIO_FindNextChannel(uint8_t Channel, int8_t Direction, bool bCheckScanList, uint8_t VFO)

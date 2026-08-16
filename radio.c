@@ -102,10 +102,10 @@ bool RADIO_CheckValidChannel(uint16_t channel, bool checkScanList, uint8_t scanL
         return false;
     }
 
-    //return true;
+    // What happens when scanList equals 0 or 4? Most likely reading a 0 value, which means channel number 0 will be skipped.
+    if(scanList == 0 || scanList == 4) // the proposed fix
+        return true;
 
-    // I don't understand what this code is for...
-    
     const uint8_t PriorityCh1 = gEeprom.SCANLIST_PRIORITY_CH1[scanList - 1];
     const uint8_t PriorityCh2 = gEeprom.SCANLIST_PRIORITY_CH2[scanList - 1];
 

@@ -163,6 +163,7 @@ static union
 
 static uint32_t Timestamp;
 static uint16_t gUART_WriteIndex;
+static uint16_t UART_CommandSize;
 static bool     bIsEncrypted = true;
 
 static void SendReply(void *pReply, uint16_t Size)
@@ -262,6 +263,7 @@ static void CMD_051B(const uint8_t *pBuffer)
     const CMD_051B_t *pCmd = (const CMD_051B_t *)pBuffer;
     REPLY_051B_t      Reply;
     bool              bLocked = false;
+    uint8_t           size = pCmd->Size;
 
     if (pCmd->Timestamp != Timestamp)
         return;
@@ -272,19 +274,22 @@ static void CMD_051B(const uint8_t *pBuffer)
         gFmRadioCountdown_500ms = fm_radio_countdown_500ms;
     #endif
 
+    if (size > sizeof(Reply.Data.Data))
+        size = sizeof(Reply.Data.Data);
+
     memset(&Reply, 0, sizeof(Reply));
     Reply.Header.ID   = 0x051C;
-    Reply.Header.Size = pCmd->Size + 4;
+    Reply.Header.Size = size + 4;
     Reply.Data.Offset = pCmd->Offset;
-    Reply.Data.Size   = pCmd->Size;
+    Reply.Data.Size   = size;
 
     if (bHasCustomAesKey)
         bLocked = gIsLocked;
 
     if (!bLocked)
-        EEPROM_ReadBuffer(pCmd->Offset, Reply.Data.Data, pCmd->Size);
+        EEPROM_ReadBuffer(pCmd->Offset, Reply.Data.Data, size);
 
-    SendReply(&Reply, pCmd->Size + 8);
+    SendReply(&Reply, size + 8);
 }
 
 // write eeprom
@@ -493,6 +498,8 @@ bool UART_IsCommandAvailable(void)
     uint16_t CommandLength;
     uint16_t DmaLength = DMA_CH0->ST & 0xFFFU;
 
+    UART_CommandSize = 0;
+
     while (1)
     {
         if (gUART_WriteIndex == DmaLength)
@@ -574,7 +581,11 @@ bool UART_IsCommandAvailable(void)
     
     CRC = UART_Command.Buffer[Size] | (UART_Command.Buffer[Size + 1] << 8);
 
-    return (CRC_Calculate(UART_Command.Buffer, Size) != CRC) ? false : true;
+    if (CRC_Calculate(UART_Command.Buffer, Size) != CRC)
+        return false;
+
+    UART_CommandSize = Size;
+    return true;
 }
 
 void UART_HandleCommand(void)
@@ -582,16 +593,22 @@ void UART_HandleCommand(void)
     switch (UART_Command.Header.ID)
     {
         case 0x0514:
-            CMD_0514(UART_Command.Buffer);
+            if (UART_CommandSize >= sizeof(CMD_0514_t))
+                CMD_0514(UART_Command.Buffer);
             break;
     
         case 0x051B:
-            CMD_051B(UART_Command.Buffer);
+            if (UART_CommandSize >= sizeof(CMD_051B_t))
+                CMD_051B(UART_Command.Buffer);
             break;
     
-        case 0x051D:
-            CMD_051D(UART_Command.Buffer);
+        case 0x051D: {
+            const CMD_051D_t *pCmd = (const CMD_051D_t *)UART_Command.Buffer;
+            if (UART_CommandSize >= sizeof(*pCmd) &&
+                pCmd->Size <= UART_CommandSize - sizeof(*pCmd))
+                CMD_051D(UART_Command.Buffer);
             break;
+        }
     
         case 0x051F:    // Not implementing non-authentic command
             break;

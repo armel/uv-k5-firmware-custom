@@ -78,22 +78,39 @@ void UI_PrintStringBuffer(const char *pString, uint8_t * buffer, uint32_t char_w
     }
 }
 
+__attribute__((noinline))
 void UI_PrintString(const char *pString, uint8_t Start, uint8_t End, uint8_t Line, uint8_t Width)
 {
-    size_t i;
-    size_t Length = strlen(pString);
+    const size_t GlyphWidth = sizeof(gFontBig[0]) / 2;
+    size_t Available;
+    size_t Used;
+    size_t Length = 0;
+
+    if (Line >= FRAME_LINES - 1 || Width < GlyphWidth || Start > LCD_WIDTH - GlyphWidth)
+        return;
+
+    if (End > Start && End < LCD_WIDTH)
+        Available = (size_t)End - Start + 1;
+    else
+        Available = LCD_WIDTH - Start;
+
+    Used = (End > Start) ? Width : GlyphWidth;
+    while (Used <= Available && pString[Length] != '\0') {
+        Length++;
+        Used += Width;
+    }
 
     if (End > Start)
-        Start += (((End - Start) - (Length * Width)) + 1) / 2;
+        Start += (Available - (Used - Width)) / 2;
 
-    for (i = 0; i < Length; i++)
+    for (size_t i = 0; i < Length; i++)
     {
         const unsigned int ofs   = (unsigned int)Start + (i * Width);
         if (pString[i] > ' ' && pString[i] < 127)
         {
             const unsigned int index = pString[i] - ' ' - 1;
-            memcpy(gFrameBuffer[Line + 0] + ofs, &gFontBig[index][0], 7);
-            memcpy(gFrameBuffer[Line + 1] + ofs, &gFontBig[index][7], 7);
+            memcpy(gFrameBuffer[Line + 0] + ofs, &gFontBig[index][0], GlyphWidth);
+            memcpy(gFrameBuffer[Line + 1] + ofs, &gFontBig[index][GlyphWidth], GlyphWidth);
         }
     }
 }

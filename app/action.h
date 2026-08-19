@@ -50,6 +50,9 @@ void ACTION_SwitchDemodul(void);
         void ACTION_Remove_Offset(void);
     #endif
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    void ACTION_Message(void);
+#endif
 
 void ACTION_Handle(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
 

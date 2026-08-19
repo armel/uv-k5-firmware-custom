@@ -34,6 +34,21 @@ channel settings are restored the moment you leave the Message screen.
 2. Press `MENU` to open it, then `MENU` again to confirm — this drops you into the
    **Inbox** screen.
 
+### Faster: a side-button shortcut
+
+If you'd rather skip the menu entirely, either of the radio's side buttons (SIDE1 or
+SIDE2, above the PTT) can be assigned to jump straight to the Message Inbox from
+anywhere — the main screen, a menu, mid-scan:
+
+1. Press `MENU`, scroll to **F1Shrt**, **F1Long**, **F2Shrt**, or **F2Long** (whichever
+   button/press-length you want to reassign).
+2. Press `MENU`, cycle with `UP`/`DOWN` to **MSG**, then `MENU` to confirm.
+3. That button now opens Message mode directly, without touching the normal menu.
+
+Pressing it again while already inside Message mode just resets you back to the Inbox
+(harmless, but it will drop whatever you were mid-typing) — it doesn't back you out to
+the main screen the way `EXIT` does.
+
 ## Setting your radio ID
 
 Every radio needs a small numeric ID (1–65534) that identifies it to others. Set it

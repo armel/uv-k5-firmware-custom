@@ -28,6 +28,9 @@
 #ifdef ENABLE_FMRADIO
     #include "app/fm.h"
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    #include "app/message.h"
+#endif
 #include "app/scanner.h"
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
@@ -125,6 +128,9 @@ void (*action_opt_table[])(void) = {
 #ifdef ENABLE_REGA
     [ACTION_OPT_REGA_ALARM] = &ACTION_RegaAlarm,
     [ACTION_OPT_REGA_TEST] = &ACTION_RegaTest,
+#endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    [ACTION_OPT_MESSAGE] = &ACTION_Message,
 #endif
 };
 
@@ -594,6 +600,17 @@ void ACTION_Wn(void)
         }
     #endif
 }
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+void ACTION_Message(void)
+{
+    if (gCurrentFunction == FUNCTION_TRANSMIT) {
+        return; // don't reconfigure TX power/RF mid-transmission
+    }
+    MESSAGE_Enter();
+    gRequestDisplayScreen = DISPLAY_MESSAGE;
+}
+#endif
 
 void ACTION_BackLight(void)
 {

@@ -468,6 +468,9 @@ const t_sidefunction gSubMenu_SIDEFUNCTIONS[] =
         {"REMOVE\nOFFSET",  ACTION_OPT_REMOVE_OFFSET},
     #endif
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    {"MSG",             ACTION_OPT_MESSAGE},
+#endif
 };
 
 const uint8_t gSubMenu_SIDEFUNCTIONS_size = ARRAY_SIZE(gSubMenu_SIDEFUNCTIONS);

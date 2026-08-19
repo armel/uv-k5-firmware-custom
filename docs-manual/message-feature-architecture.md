@@ -91,6 +91,27 @@ typedef struct __attribute__((packed)) {
 tell a retransmission of the same logical message apart from a genuinely new one
 from the same sender, so retries never show up twice in the Inbox history.
 
+## Entry points
+
+`MESSAGE_Enter()` is reachable two ways, both ending in the same call plus a deferred
+screen switch:
+
+- **Menu:** `app/menu.c`'s `MENU_AcceptSetting()`, `case MENU_MESSAGE:` — calls
+  `MESSAGE_Enter()` then `GUI_SelectNextDisplay(DISPLAY_MESSAGE)` directly, since that
+  code path runs before the generic end-of-keypress-cycle screen-switch consumer (see
+  the `MENU_D_LIST` precedent it's modeled on).
+- **Side-key action:** `app/action.c`'s `ACTION_Message()`, wired into
+  `action_opt_table[ACTION_OPT_MESSAGE]` the same way every other assignable side
+  button action is (`ACTION_OPT_RXMODE`, `ACTION_OPT_MAINONLY`, etc. — see
+  `settings.h`'s `ACTION_OPT_t` and `ui/menu.c`'s `gSubMenu_SIDEFUNCTIONS[]`, the list
+  the F1Shrt/F1Long/F2Shrt/F2Long menu items assign from). Since `ACTION_Handle()`
+  routes `KEY_SIDE1`/`KEY_SIDE2` to `action_opt_table[]` regardless of which screen is
+  currently active, this works as a global shortcut. This path sets
+  `gRequestDisplayScreen = DISPLAY_MESSAGE` instead of calling
+  `GUI_SelectNextDisplay()` directly, matching the convention other
+  `action_opt_table[]` entries use (e.g. `ACTION_FM()`) — the generic handler in
+  `app/app.c` performs the actual transition afterward.
+
 ## RF session setup
 
 `MESSAGE_Enter()` saves the live VFO/EEPROM settings it's about to override, then
@@ -281,8 +302,9 @@ value (`0xFFFF`) or `0` defaults to radio ID `1`.
 | `settings.h` / `settings.c` | `RADIO_ID` field, `SETTINGS_SaveRadioID()` |
 | `app/app.c` | Screen/key dispatch table entries, FSK RX interrupt hook, 10ms scheduler hook |
 | `audio.c` | `MESSAGE_RearmModem()` call after beeps (register-reuse fix) |
-| `ui/menu.c` / `ui/menu.h` | "Msg" menu entry (in the always-visible section) |
+| `ui/menu.c` / `ui/menu.h` | "Msg" menu entry, `gSubMenu_SIDEFUNCTIONS[]` "MSG" option |
 | `ui/ui.h` / `ui/ui.c` | `DISPLAY_MESSAGE` screen enum + dispatch |
+| `app/action.c` / `app/action.h` | `ACTION_Message()`, the assignable side-key entry point |
 | `Makefile` | `ENABLE_FEAT_F4HWN_MESSAGE` flag (default off), object files, CFLAGS |
 
 ## Flash footprint

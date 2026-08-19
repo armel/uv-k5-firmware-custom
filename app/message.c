@@ -104,12 +104,14 @@ void MESSAGE_Enter(void)
     // Force the same "clean slate" RF configuration AirCopy gets from its
     // dedicated fresh VFO, on top of whatever channel the user is currently
     // on: NARROW bandwidth, FM, simplex (no repeater offset), no CTCSS/DCS,
-    // and low TX power. Only the frequency itself is left as the user tuned
-    // it. Any of these left at the channel's normal values (a lingering
-    // repeater shift sending TX and RX to different frequencies, a CTCSS
-    // tone riding on top of the FSK deviation, AM demod, or high TX power
-    // overloading a nearby receiver on the bench) can garble or misroute
-    // the burst in ways the dedicated AirCopy channel never has to deal with.
+    // and a fixed TX power (HIGH, for range -- AirCopy itself uses LOW1
+    // instead, since it's tuned for bench testing where the desense risk
+    // matters more than range). Only the frequency itself is left as the
+    // user tuned it. Any of these left at the channel's normal values (a
+    // lingering repeater shift sending TX and RX to different frequencies,
+    // or a CTCSS tone riding on top of the FSK deviation) can garble or
+    // misroute the burst in ways the dedicated AirCopy channel never has to
+    // deal with.
     gMsgSavedBandwidth   = gRxVfo->CHANNEL_BANDWIDTH;
     gMsgSavedModulation  = gRxVfo->Modulation;
     gMsgSavedOffsetDir   = gRxVfo->TX_OFFSET_FREQUENCY_DIRECTION;
@@ -124,7 +126,7 @@ void MESSAGE_Enter(void)
     gRxVfo->TX_OFFSET_FREQUENCY_DIRECTION = TX_OFFSET_FREQUENCY_DIRECTION_OFF;
     gRxVfo->freq_config_RX.CodeType       = CODE_TYPE_OFF;
     gRxVfo->freq_config_TX.CodeType       = CODE_TYPE_OFF;
-    gRxVfo->OUTPUT_POWER                  = OUTPUT_POWER_LOW1;
+    gRxVfo->OUTPUT_POWER                  = OUTPUT_POWER_HIGH;
     RADIO_ApplyOffset(gRxVfo);
     RADIO_ConfigureSquelchAndOutputPower(gRxVfo);
 

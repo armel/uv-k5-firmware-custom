@@ -105,10 +105,12 @@ forces:
   looking, at a glance, like "the same channel."
 - `freq_config_RX/TX.CodeType = CODE_TYPE_OFF` — no CTCSS/DCS tone riding on top of
   the FSK deviation.
-- `OUTPUT_POWER = OUTPUT_POWER_LOW1`, followed by `RADIO_ConfigureSquelchAndOutputPower()`
+- `OUTPUT_POWER = OUTPUT_POWER_HIGH`, followed by `RADIO_ConfigureSquelchAndOutputPower()`
   (which recomputes the calibration-derived `TXP_CalculatedSetting` that
-  `RADIO_SetTxParameters()` actually reads) — avoids front-end overload/desense on a
-  nearby receiver during bench testing.
+  `RADIO_SetTxParameters()` actually reads) — favors range over AirCopy's own choice
+  of `OUTPUT_POWER_LOW1`, which is tuned for bench testing where two radios sitting
+  close together risk front-end overload/desense at higher power. Drop this back to
+  a LOW level if testing radios side by side.
 - `gEeprom.DUAL_WATCH`, `CROSS_BAND_RX_TX`, `BATTERY_SAVE` all forced off — these
   three drive background tasks in `app/app.c`'s `APP_TimeSlice10ms()`
   (`DualwatchAlternate()` and the power-save scheduler) that periodically swap the

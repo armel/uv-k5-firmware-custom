@@ -53,7 +53,13 @@ void UI_DisplayMessage(void)
         case MSG_UI_INBOX: {
             UI_PrintString("MESSAGES", 2, 127, 0, 8);
 
-            if (gMsgHistoryCount == 0) {
+            if (gMsgPagedBySenderID != 0) {
+                // MESSAGE_HandleDtmfDigit() (app/message.c) just auto-switched
+                // us here from a DTMF page -- the actual message is still in
+                // flight over FSK, so say who's about to send it.
+                sprintf(String, "PAGED BY %u", gMsgPagedBySenderID);
+                UI_PrintStringSmallNormal(String, 2, 127, 2);
+            } else if (gMsgHistoryCount == 0) {
                 UI_PrintString("NO MESSAGES", 2, 127, 3, 8);
             } else {
                 const MSG_HistoryEntry_t *e = &gMsgHistory[gMsgHistoryCursor];
@@ -132,6 +138,12 @@ void UI_DisplayMessage(void)
                 UI_PrintString("NO REPLY", 2, 127, 3, 8);
             } else {
                 UI_PrintString("SENDING...", 2, 127, 3, 8);
+                // Unicast retries now span ~1 minute (paging needs time for a
+                // human to react) -- without this it just looks hung.
+                if (!gMsgComposeBroadcast) {
+                    sprintf(String, "RETRIES LEFT %u", gMsgTxRetriesLeft);
+                    UI_PrintStringSmallNormal(String, 2, 127, 5);
+                }
             }
             break;
 

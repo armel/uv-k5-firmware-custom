@@ -731,6 +731,12 @@ static void CheckRadioInterrupts(void)
                         DTMF_HandleRequest();
                     }
 #endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+                    // Independent of ENABLE_DTMF_CALLING/gSetting_live_DTMF_decoder
+                    // above, so paging works with just Message compiled in.
+                    MESSAGE_HandleDtmfDigit(c);
+#endif
                 }
             }
         }

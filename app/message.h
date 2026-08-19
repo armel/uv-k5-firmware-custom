@@ -31,10 +31,27 @@
 #define MSG_BROADCAST_ID          0xFFFFu
 #define MSG_TEXT_MAX              58u
 #define MSG_HISTORY_SIZE          5u
-#define MSG_TX_MAX_RETRIES        3u
-#define MSG_ACK_TIMEOUT_10MS      80u
+// Unicast retries: a DTMF page (MESSAGE_SendPage()) now precedes every unicast
+// send, and the receiver needs real wall-clock time to notice it and
+// auto-switch into Msg mode -- a human, not a radio that's already listening.
+// 20 retries * ~3s ACK timeout each keeps the burst going for about a minute
+// instead of the ~2.4s that's only enough for an already-armed receiver.
+#define MSG_TX_MAX_RETRIES        20u
+#define MSG_ACK_TIMEOUT_10MS      300u
 #define MSG_BROADCAST_REPEAT_10MS 30u
 #define MSG_MULTITAP_TIMEOUT_10MS 90u
+// DTMF page burst, sent once per outgoing unicast message ahead of the FSK
+// data: "AD" + 5-digit destID + 5-digit senderID, zero-padded. 'A'/'D' are
+// deliberately used as the marker -- real handheld mic keypads have no A-D
+// buttons, so this can't collide with anything a human actually dials.
+#define MSG_PAGE_MARKER           "AD"
+#define MSG_PAGE_LEN              12u
+// Fixed rather than gEeprom.DTMF_CODE_PERSIST_TIME/DTMF_CODE_INTERVAL_TIME:
+// those default to 100ms/100ms and aren't exposed anywhere in this fork's
+// menu to retune, and 100ms proved too short to decode reliably on the
+// bench (only the mute/unmute click at each digit boundary came through).
+#define MSG_PAGE_TONE_MS          100u
+#define MSG_PAGE_GAP_MS           100u
 
 typedef struct __attribute__((packed)) {
     uint16_t senderID;
@@ -91,6 +108,7 @@ extern uint16_t           gMsg_FSK_Buffer[36];
 
 extern MSG_UiMode_t       gMsgUiMode;
 extern MSG_TxState_t      gMsgTxState;
+extern uint8_t            gMsgTxRetriesLeft;  // shown on MSG_UI_SENDING so a ~1min wait doesn't look frozen
 
 extern MSG_HistoryEntry_t gMsgHistory[MSG_HISTORY_SIZE];
 extern uint8_t            gMsgHistoryCount;
@@ -113,6 +131,11 @@ extern uint32_t           gMsgComposeDestID;
 extern bool               gMsgComposeBroadcast;
 extern MSG_InputMode_t    gMsgInputMode;  // multi-tap mode; shown in the compose footer
 
+// Set by MESSAGE_HandleDtmfDigit() when a DTMF page addressed to us just
+// auto-switched the display into Msg mode; 0 = no page pending display.
+// Cleared automatically by MESSAGE_TimeSlice10ms() after a few seconds.
+extern uint16_t           gMsgPagedBySenderID;
+
 void MESSAGE_Enter(void);
 void MESSAGE_Exit(void);
 // Re-applies the FSK-RX modem config. AUDIO_PlayBeep() drives the BK4819
@@ -124,6 +147,12 @@ void MESSAGE_RearmModem(void);
 void MESSAGE_TimeSlice10ms(void);
 void MESSAGE_StorePacket(void);
 void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
+// Fed one decoded DTMF character at a time from app/app.c's CheckRadioInterrupts(),
+// independent of ENABLE_DTMF_CALLING/gSetting_live_DTMF_decoder so paging works
+// with just this feature compiled in. Matches a trailing MSG_PAGE_MARKER + 10
+// digit run against a rolling buffer; on a full match addressed to our own
+// Radio ID it auto-switches into Msg mode with no user action.
+void MESSAGE_HandleDtmfDigit(char c);
 
 #endif
 

@@ -22,6 +22,7 @@
 #include "audio.h"
 #include "driver/bk4819.h"
 #include "driver/crc.h"
+#include "external/printf/printf.h"
 #include "frequencies.h"
 #include "misc.h"
 #include "radio.h"
@@ -51,6 +52,9 @@ unsigned int       gMsgComposeIndex;
 uint32_t           gMsgComposeDestID;
 bool               gMsgComposeBroadcast;
 MSG_InputMode_t    gMsgInputMode;
+
+uint16_t           gMsgPagedBySenderID;
+static uint16_t    gMsgPageBannerCountdown_10ms;
 
 // Multi-tap letter groups, standard phone-keypad convention, indexed by Key-KEY_0.
 // Digit-entry mode bypasses this table entirely (see MSG_INPUT_DIGIT handling below).
@@ -82,7 +86,7 @@ static void MESSAGE_CommitMultitapChar(void)
 static MSG_DataPacket_t gMsgPendingPacket;
 static bool              gMsgIsBroadcast;
 static uint16_t          gMsgTxCountdown_10ms;
-static uint8_t           gMsgTxRetriesLeft;
+uint8_t                  gMsgTxRetriesLeft;
 static uint8_t           gMsgBroadcastRepeatsLeft;
 static uint16_t          gMsgResultDisplayCountdown_10ms;
 
@@ -108,6 +112,7 @@ static uint8_t          gMsgSavedRxCode;
 static DCS_CodeType_t   gMsgSavedTxCodeType;
 static uint8_t          gMsgSavedTxCode;
 static uint8_t          gMsgSavedOutputPower;
+static uint8_t          gMsgSavedCompander;
 static uint8_t          gMsgSavedDualWatch;
 static uint8_t          gMsgSavedCrossBand;
 static uint8_t          gMsgSavedBatterySave;
@@ -132,14 +137,17 @@ void MESSAGE_Enter(void)
     // Force the same "clean slate" RF configuration AirCopy gets from its
     // dedicated fresh VFO, on top of whatever channel the user is currently
     // on: NARROW bandwidth, FM, simplex (no repeater offset), no CTCSS/DCS,
-    // and a fixed TX power (HIGH, for range -- AirCopy itself uses LOW1
-    // instead, since it's tuned for bench testing where the desense risk
-    // matters more than range). Only the frequency itself is left as the
-    // user tuned it. Any of these left at the channel's normal values (a
-    // lingering repeater shift sending TX and RX to different frequencies,
-    // or a CTCSS tone riding on top of the FSK deviation) can garble or
-    // misroute the burst in ways the dedicated AirCopy channel never has to
-    // deal with.
+    // no audio compander, and a fixed TX power (HIGH, for range -- AirCopy
+    // itself uses LOW1 instead, since it's tuned for bench testing where the
+    // desense risk matters more than range). Only the frequency itself is
+    // left as the user tuned it. Any of these left at the channel's normal
+    // values (a lingering repeater shift sending TX and RX to different
+    // frequencies, a CTCSS tone riding on top of the FSK deviation, or
+    // compander compression/expansion mangling the FSK tone's amplitude)
+    // can garble or misroute the burst, or stop the correlator from ever
+    // syncing at all, in ways the dedicated AirCopy channel never has to
+    // deal with -- AirCopy's VFO is fully zeroed via RADIO_InitInfo()
+    // (helper/boot.c), not patched field-by-field like this.
     gMsgSavedBandwidth   = gRxVfo->CHANNEL_BANDWIDTH;
     gMsgSavedModulation  = gRxVfo->Modulation;
     gMsgSavedOffsetDir   = gRxVfo->TX_OFFSET_FREQUENCY_DIRECTION;
@@ -148,6 +156,7 @@ void MESSAGE_Enter(void)
     gMsgSavedTxCodeType  = gRxVfo->freq_config_TX.CodeType;
     gMsgSavedTxCode      = gRxVfo->freq_config_TX.Code;
     gMsgSavedOutputPower = gRxVfo->OUTPUT_POWER;
+    gMsgSavedCompander   = gRxVfo->Compander;
 
     gRxVfo->CHANNEL_BANDWIDTH             = BANDWIDTH_NARROW;
     gRxVfo->Modulation                    = MODULATION_FM;
@@ -155,6 +164,7 @@ void MESSAGE_Enter(void)
     gRxVfo->freq_config_RX.CodeType       = CODE_TYPE_OFF;
     gRxVfo->freq_config_TX.CodeType       = CODE_TYPE_OFF;
     gRxVfo->OUTPUT_POWER                  = OUTPUT_POWER_HIGH;
+    gRxVfo->Compander                     = 0;
     RADIO_ApplyOffset(gRxVfo);
     RADIO_ConfigureSquelchAndOutputPower(gRxVfo);
 
@@ -183,6 +193,7 @@ void MESSAGE_Exit(void)
     gRxVfo->freq_config_TX.CodeType       = gMsgSavedTxCodeType;
     gRxVfo->freq_config_TX.Code           = gMsgSavedTxCode;
     gRxVfo->OUTPUT_POWER                  = gMsgSavedOutputPower;
+    gRxVfo->Compander                     = gMsgSavedCompander;
     RADIO_ApplyOffset(gRxVfo);
     RADIO_ConfigureSquelchAndOutputPower(gRxVfo);
 
@@ -224,6 +235,86 @@ static void MESSAGE_TransmitFrame(uint8_t type, const void *payload64)
     BK4819_PrepareFSKReceive();
 }
 
+// Sent once ahead of a unicast message so a receiver who isn't even in Msg
+// mode yet can be paged: DTMF is decoded continuously in the background on
+// any normal voice channel (BK4819_EnableDTMF() is unconditional in
+// RADIO_SetupRegisters(), radio.c), unlike the FSK modem this feature
+// otherwise relies on. Uses the same TX-key/tone/TX-unkey bracket as
+// app/dtmf.c's DTMF_SendEndOfTransmission(), bracketed by the same
+// key-up/key-down calls MESSAGE_TransmitFrame() uses for its FSK bursts.
+static void MESSAGE_SendPage(uint16_t destID)
+{
+    char code[MSG_PAGE_LEN + 1];
+    sprintf(code, MSG_PAGE_MARKER "%05u%05u", destID, gEeprom.RADIO_ID);
+
+    // functions.c's FUNCTION_Transmit() does this before every normal PTT
+    // transmission, with the comment "if DTMF is enabled when TX'ing, it
+    // changes the TX audio filtering!!". MESSAGE_Enter() leaves the DTMF
+    // decoder running (RADIO_SetupRegisters() turns it on unconditionally),
+    // and unlike a normal PTT keyup this function never goes through
+    // FUNCTION_Transmit() to get that disable for free -- without it the
+    // page's own tones ride out through corrupted TX filtering.
+    BK4819_DisableDTMF();
+
+    RADIO_SetTxParameters();
+
+    // At this point the modem is still configured for FSK from Msg mode
+    // (MESSAGE_SetupModem() set REG_58's FSK-enable bits, and neither
+    // RADIO_SetTxParameters() nor BK4819_EnterDTMF_TX() touch REG_58).
+    // driver/bk4819.c's own BK4819_PlayRogerMDC() treats leaving FSK mode
+    // enabled as something that must be explicitly undone ("disable FSK")
+    // before/after using the tone generator for anything else -- do the
+    // same here, or the DTMF tones ride out through FSK-mode logic instead
+    // of a normal dual-tone path and the far end never decodes them.
+    BK4819_WriteRegister(BK4819_REG_58, 0x0000);
+
+    // true, not false: BK4819_EnterDTMF_TX()'s bLocalLoopback picks
+    // BK4819_AF_BEEP vs BK4819_AF_MUTE as the AF source. That's not just a
+    // local-sidetone toggle -- MUTE apparently keeps the tone generator's
+    // output from actually reaching the TX modulation path at all, not only
+    // the speaker. DTMF_Reply() passes gEeprom.DTMF_SIDE_TONE here (true by
+    // default on a blank EEPROM, settings.c), which is why manual dialing
+    // worked over the air while this hardcoded false produced a real
+    // carrier with no audible tone whatsoever, confirmed by monitoring on a
+    // third radio.
+    //
+    // DTMF_Reply() also pairs that AF_BEEP selection with AUDIO_AudioPathOn()
+    // -- without it, only the mute/unmute clicks at each digit boundary seem
+    // to get through (audible as "poc poc"), not the actual tone in between.
+    AUDIO_AudioPathOn();
+    gEnableSpeaker = true;
+
+    BK4819_EnterDTMF_TX(true);
+    BK4819_PlayDTMFString(
+        code,
+        false,
+        MSG_PAGE_TONE_MS,
+        MSG_PAGE_TONE_MS,
+        MSG_PAGE_TONE_MS,
+        MSG_PAGE_GAP_MS);
+
+    AUDIO_AudioPathOff();
+    gEnableSpeaker = false;
+
+    BK4819_ExitDTMF_TX(false);
+    BK4819_SetupPowerAmplifier(0, 0);
+    BK4819_ToggleGpioOut(BK4819_GPIO1_PIN29_PA_ENABLE, false);
+
+    // Not just BK4819_PrepareFSKReceive(): BK4819_ExitDTMF_TX() zeroes REG_70
+    // and never restores it, and REG_72 is left at the DTMF tone frequency
+    // it was last set to -- both registers MESSAGE_SetupModem() repurposes
+    // for FSK's baud-rate clock. Skipping the full rearm here left the very
+    // next FSK burst (the actual message) transmitting with no baud clock.
+    MESSAGE_RearmModem();
+
+    // BK4819_ExitDTMF_TX() (just above, via BK4819_ExitDTMF_TX -> BK4819_DisableDTMF())
+    // leaves the DTMF decoder off. A normal PTT release goes back through
+    // RADIO_SetupRegisters(), which turns it back on unconditionally; this
+    // path doesn't, so without this call our own radio couldn't hear a page
+    // sent back to it while sitting in Msg mode.
+    BK4819_EnableDTMF();
+}
+
 static void MESSAGE_PushHistory(const MSG_DataPacket_t *data, bool wasBroadcast)
 {
     if (gMsgHistoryCount >= MSG_HISTORY_SIZE) {
@@ -256,6 +347,13 @@ static void MESSAGE_BeginSend(uint16_t destID, bool broadcast, const char *text,
     gMsgIsBroadcast          = broadcast;
     gMsgTxRetriesLeft        = MSG_TX_MAX_RETRIES;
     gMsgBroadcastRepeatsLeft = broadcast ? 1 : 0;
+
+    // Broadcast has no single target to page, and paging every radio in
+    // range into Msg mode on a broadcast isn't desired -- unicast only.
+    if (!broadcast) {
+        MESSAGE_SendPage(destID);
+    }
+
     gMsgTxState              = MSG_TX_SENDING;
 }
 
@@ -288,6 +386,11 @@ static void MESSAGE_CheckPartialFrame(void)
 void MESSAGE_TimeSlice10ms(void)
 {
     MESSAGE_CheckPartialFrame();
+
+    if (gMsgPageBannerCountdown_10ms > 0 && --gMsgPageBannerCountdown_10ms == 0) {
+        gMsgPagedBySenderID = 0;
+        gUpdateDisplay = true;
+    }
 
     // Keep the inbox's live RSSI reading moving even with no other activity.
     if (gMsgUiMode == MSG_UI_INBOX
@@ -461,6 +564,64 @@ void MESSAGE_StorePacket(void)
         memset(gMsgPendingAck.reserved, 0, sizeof(gMsgPendingAck.reserved));
         gMsgPendingAckToSend = true;
     }
+}
+
+// Rolling window of the last MSG_PAGE_LEN decoded DTMF characters. No
+// staleness timeout: MSG_PAGE_MARKER ('A'/'D') can't be produced by a real
+// mic keypad, so an accidental full-pattern match from unrelated chatter is
+// already astronomically unlikely without one, and adding a timer would just
+// mean re-plumbing a periodic tick into a path that runs whether or not
+// we're anywhere near the Msg screen.
+static char    gMsgPageBuf[MSG_PAGE_LEN + 1];
+static uint8_t gMsgPageLen;
+
+void MESSAGE_HandleDtmfDigit(char c)
+{
+    if (gMsgPageLen >= MSG_PAGE_LEN) {
+        memmove(&gMsgPageBuf[0], &gMsgPageBuf[1], MSG_PAGE_LEN - 1);
+        gMsgPageLen--;
+    }
+    gMsgPageBuf[gMsgPageLen++] = c;
+    gMsgPageBuf[gMsgPageLen]   = 0;
+
+    if (gMsgPageLen < MSG_PAGE_LEN) {
+        return;
+    }
+
+    if (memcmp(gMsgPageBuf, MSG_PAGE_MARKER, 2) != 0) {
+        return;
+    }
+
+    uint16_t destID   = 0;
+    uint16_t senderID = 0;
+    for (unsigned int i = 0; i < 5; i++) {
+        const char destDigit   = gMsgPageBuf[2 + i];
+        const char senderDigit = gMsgPageBuf[7 + i];
+        if (destDigit < '0' || destDigit > '9' || senderDigit < '0' || senderDigit > '9') {
+            return;
+        }
+        destID   = (destID   * 10) + (destDigit   - '0');
+        senderID = (senderID * 10) + (senderDigit - '0');
+    }
+
+    gMsgPageLen = 0; // consumed -- a retry of the exact same page can trigger again
+
+    if (destID != gEeprom.RADIO_ID) {
+        return; // page is for someone else
+    }
+
+    gMsgPagedBySenderID = senderID;
+    gMsgPageBannerCountdown_10ms = 300; // 3s
+
+    if (gScreenToDisplay == DISPLAY_MESSAGE) {
+        gUpdateDisplay = true;
+        return; // already positioned to receive the message itself
+    }
+
+    AUDIO_PlayBeep(BEEP_880HZ_60MS_DOUBLE_BEEP);
+    MESSAGE_Enter();
+    GUI_SelectNextDisplay(DISPLAY_MESSAGE);
+    gRequestDisplayScreen = DISPLAY_INVALID;
 }
 
 static void MESSAGE_BeginComposeText(void)

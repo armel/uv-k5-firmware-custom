@@ -44,6 +44,7 @@ MSG_TxState_t      gMsgTxState;
 MSG_HistoryEntry_t gMsgHistory[MSG_HISTORY_SIZE];
 uint8_t            gMsgHistoryCount;
 uint8_t            gMsgHistoryCursor;
+unsigned int       gMsgReadScroll;
 
 char               gMsgComposeText[MSG_TEXT_MAX + 1];
 unsigned int       gMsgComposeIndex;
@@ -530,6 +531,15 @@ void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
                     gMsgUiMode     = MSG_UI_MYID;
                     break;
 
+                case KEY_F:
+                    if (gMsgHistoryCount > 0) {
+                        gMsgReadScroll = 0;
+                        gMsgUiMode     = MSG_UI_READ;
+                    } else {
+                        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+                    }
+                    break;
+
                 case KEY_EXIT:
                     MESSAGE_Exit();
                     GUI_SelectNextDisplay(DISPLAY_MAIN);
@@ -638,6 +648,38 @@ void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
                 } else {
                     gInputBox[--gInputBoxIndex] = 10;
                 }
+            }
+            break;
+
+        case MSG_UI_READ:
+            if (Key == KEY_UP) {
+                if (gMsgReadScroll >= 16) {
+                    gMsgReadScroll -= 16;
+                } else {
+                    gMsgReadScroll = 0;
+                }
+            } else if (Key == KEY_DOWN) {
+                if (gMsgHistoryCursor < gMsgHistoryCount) {
+                    const uint8_t textLen = gMsgHistory[gMsgHistoryCursor].textLen;
+                    if (gMsgReadScroll + 48 < textLen) {
+                        gMsgReadScroll += 16;
+                    }
+                }
+            } else if (Key == KEY_STAR) {
+                // Delete the message being read: shift everything after it
+                // down by one slot and drop back to the inbox.
+                if (gMsgHistoryCursor < gMsgHistoryCount) {
+                    for (uint8_t i = gMsgHistoryCursor; i + 1 < gMsgHistoryCount; i++) {
+                        gMsgHistory[i] = gMsgHistory[i + 1];
+                    }
+                    gMsgHistoryCount--;
+                    if (gMsgHistoryCursor > 0 && gMsgHistoryCursor >= gMsgHistoryCount) {
+                        gMsgHistoryCursor--;
+                    }
+                }
+                gMsgUiMode = MSG_UI_INBOX;
+            } else if (Key == KEY_EXIT) {
+                gMsgUiMode = MSG_UI_INBOX;
             }
             break;
     }

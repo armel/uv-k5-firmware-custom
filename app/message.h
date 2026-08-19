@@ -65,6 +65,7 @@ enum MSG_UiMode_t {
     MSG_UI_COMPOSE_TEXT,
     MSG_UI_SENDING,
     MSG_UI_SET_FREQ,
+    MSG_UI_READ,
 };
 typedef enum MSG_UiMode_t MSG_UiMode_t;
 
@@ -86,6 +87,7 @@ extern MSG_TxState_t      gMsgTxState;
 extern MSG_HistoryEntry_t gMsgHistory[MSG_HISTORY_SIZE];
 extern uint8_t            gMsgHistoryCount;
 extern uint8_t            gMsgHistoryCursor;
+extern unsigned int       gMsgReadScroll;  // 16-char scroll offset into the message being read
 
 // RX diagnostics: gMsgRxFrames counts every complete 72-byte over-the-air
 // capture; gMsgRxSyncFail counts ones that failed the hardware CRC bit or

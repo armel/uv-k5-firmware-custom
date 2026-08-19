@@ -151,8 +151,31 @@ void UI_DisplayMessage(void)
                 UI_DisplayFrequency(String, 16, 2, false);
             }
 
-            UI_PrintStringSmallNormal("0-9 SET   EXIT BACK", 2, 127, 6);
+            UI_PrintStringSmallNormal("0-9=SET EXIT=BACK", 2, 127, 6);
             break;
+
+        case MSG_UI_READ: {
+            const MSG_HistoryEntry_t *e = &gMsgHistory[gMsgHistoryCursor];
+
+            sprintf(String, "%s %u", e->wasBroadcast ? "ALL<-" : "FROM", e->senderID);
+            UI_PrintString(String, 2, 127, 0, 8);
+
+            const unsigned int shown = (e->textLen > gMsgReadScroll) ? (e->textLen - gMsgReadScroll) : 0;
+            const unsigned int last  = (shown > 48) ? 48 : shown;
+            sprintf(String, "%u-%u/%u", gMsgReadScroll + 1, gMsgReadScroll + last, e->textLen);
+            UI_PrintStringSmallNormal(String, 2, 127, 2);
+
+            PrintTruncatedLine(e->text + gMsgReadScroll, shown, 3);
+            if (shown > 16) {
+                PrintTruncatedLine(e->text + gMsgReadScroll + 16, shown - 16, 4);
+            }
+            if (shown > 32) {
+                PrintTruncatedLine(e->text + gMsgReadScroll + 32, shown - 32, 5);
+            }
+
+            UI_PrintStringSmallNormal("*=DEL EXIT=BACK", 2, 127, 6);
+            break;
+        }
     }
 
     ST7565_BlitFullScreen();

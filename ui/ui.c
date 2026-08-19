@@ -27,6 +27,9 @@
 #ifdef ENABLE_AIRCOPY
     #include "ui/aircopy.h"
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    #include "ui/message.h"
+#endif
 #ifdef ENABLE_FMRADIO
     #include "ui/fmradio.h"
 #endif
@@ -59,6 +62,10 @@ void (*UI_DisplayFunctions[])(void) = {
 
 #ifdef ENABLE_AIRCOPY
     [DISPLAY_AIRCOPY] = &UI_DisplayAircopy,
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    [DISPLAY_MESSAGE] = &UI_DisplayMessage,
 #endif
 
 #ifdef ENABLE_REGA

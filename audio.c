@@ -17,6 +17,9 @@
 #ifdef ENABLE_FMRADIO
     #include "app/fm.h"
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    #include "app/message.h"
+#endif
 #include "audio.h"
 #include "bsp/dp32g030/gpio.h"
 #ifdef ENABLE_FMRADIO
@@ -195,6 +198,15 @@ void AUDIO_PlayBeep(BEEP_Type_t Beep)
     gVoxResumeCountdown = 80;
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    // The tone dance above reprograms BK4819 registers that Message mode's
+    // FSK modem setup also uses, and only restores one of them -- without
+    // this the radio silently stops hearing frames/ACKs after the very
+    // first beep (even an ordinary per-keypress one) until the screen is
+    // re-entered or the frequency changed.
+    if (gScreenToDisplay == DISPLAY_MESSAGE)
+        MESSAGE_RearmModem();
+#endif
 }
 
 #ifdef ENABLE_VOICE

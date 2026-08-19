@@ -392,6 +392,15 @@ void SETTINGS_InitEEPROM(void)
         gSetting_set_ptt_session = gSetting_set_ptt;
         gEeprom.KEY_LOCK_PTT = gSetting_set_lck;
     #endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    // 1F90..1F97 (free range, between the Misc block at 0x1F88 and the F4HWN block at 0x1FF0)
+    EEPROM_ReadBuffer(0x1F90, Data, 8);
+    memcpy(&gEeprom.RADIO_ID, Data, 2);
+    if (gEeprom.RADIO_ID == 0xFFFF || gEeprom.RADIO_ID == 0) {
+        gEeprom.RADIO_ID = 1;
+    }
+#endif
 }
 
 void SETTINGS_LoadCalibration(void)
@@ -452,6 +461,16 @@ void SETTINGS_LoadCalibration(void)
 //      BK4819_WriteRegister(BK4819_REG_3C, gEeprom.BK4819_XTAL_FREQ_HIGH);
     }
 }
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+void SETTINGS_SaveRadioID(void)
+{
+    uint8_t State[8];
+    memset(State, 0xFF, sizeof(State));
+    memcpy(State, &gEeprom.RADIO_ID, 2);
+    EEPROM_WriteBuffer(0x1F90, State);
+}
+#endif
 
 uint32_t SETTINGS_FetchChannelFrequency(const int channel)
 {

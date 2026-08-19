@@ -22,6 +22,9 @@
 #include "app/dtmf.h"
 #include "app/generic.h"
 #include "app/menu.h"
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    #include "app/message.h"
+#endif
 #include "app/scanner.h"
 #include "audio.h"
 #include "board.h"
@@ -782,6 +785,15 @@ void MENU_AcceptSetting(void)
             }
             return;
 #endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+        case MENU_MESSAGE:
+            MESSAGE_Enter();
+            GUI_SelectNextDisplay(DISPLAY_MESSAGE);
+            gRequestDisplayScreen = DISPLAY_INVALID;
+            return;
+#endif
+
         case MENU_PONMSG:
             gEeprom.POWER_ON_DISPLAY_MODE = gSubMenuSelection;
             break;

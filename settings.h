@@ -302,11 +302,17 @@ typedef struct {
     uint8_t               S0_LEVEL;
     uint8_t               S9_LEVEL;
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    uint16_t              RADIO_ID;
+#endif
 } EEPROM_Config_t;
 
 extern EEPROM_Config_t gEeprom;
 
 void     SETTINGS_InitEEPROM(void);
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+void     SETTINGS_SaveRadioID(void);
+#endif
 void     SETTINGS_LoadCalibration(void);
 uint32_t SETTINGS_FetchChannelFrequency(const int channel);
 void     SETTINGS_FetchChannelName(char *s, const int channel);

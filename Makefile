@@ -17,7 +17,7 @@ ENABLE_DTMF_CALLING             ?= 0
 ENABLE_FLASHLIGHT               ?= 1
 
 # ---- CUSTOM MODS ----
-ENABLE_SPECTRUM                 ?= 0
+ENABLE_SPECTRUM                 ?= 1
 ENABLE_BIG_FREQ                 ?= 1
 ENABLE_SMALL_BOLD               ?= 1
 ENABLE_CUSTOM_MENU_LAYOUT       ?= 1
@@ -68,6 +68,7 @@ ENABLE_FEAT_F4HWN_PMR           ?= 0
 ENABLE_FEAT_F4HWN_GMRS_FRS_MURS	?= 0
 ENABLE_FEAT_F4HWN_CA            ?= 1
 ENABLE_FEAT_F4HWN_DEBUG         ?= 0
+ENABLE_FEAT_F4HWN_MESSAGE       ?= 0
 
 # ---- DEBUGGING ----
 ENABLE_AM_FIX_SHOW_DATA         ?= 0
@@ -122,7 +123,7 @@ ifeq ($(ENABLE_FMRADIO),1)
 	OBJS += driver/bk1080.o
 endif
 OBJS += driver/bk4819.o
-ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART),1),1)
+ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART) $(ENABLE_FEAT_F4HWN_MESSAGE),1),1)
 	OBJS += driver/crc.o
 endif
 OBJS += driver/eeprom.o
@@ -144,6 +145,9 @@ endif
 OBJS += app/action.o
 ifeq ($(ENABLE_AIRCOPY),1)
 	OBJS += app/aircopy.o
+endif
+ifeq ($(ENABLE_FEAT_F4HWN_MESSAGE),1)
+	OBJS += app/message.o
 endif
 OBJS += app/app.o
 OBJS += app/chFrScanner.o
@@ -192,6 +196,9 @@ OBJS += scheduler.o
 OBJS += settings.o
 ifeq ($(ENABLE_AIRCOPY),1)
 	OBJS += ui/aircopy.o
+endif
+ifeq ($(ENABLE_FEAT_F4HWN_MESSAGE),1)
+	OBJS += ui/message.o
 endif
 OBJS += ui/battery.o
 ifeq ($(ENABLE_FMRADIO),1)
@@ -247,7 +254,7 @@ ifeq ($(ENABLE_FEAT_F4HWN),1)
 	VERSION_STRING_1 ?= v0.22
 
 	AUTHOR_STRING_2 ?= F4HWN
-	VERSION_STRING_2 ?= v4.3
+	VERSION_STRING_2 ?= v4.7
 
 	EDITION_STRING ?= Custom
 
@@ -501,6 +508,9 @@ ifeq ($(ENABLE_FEAT_F4HWN_CA),1)
 endif
 ifeq ($(ENABLE_FEAT_F4HWN_DEBUG),1)
 	CFLAGS  += -DENABLE_FEAT_F4HWN_DEBUG
+endif
+ifeq ($(ENABLE_FEAT_F4HWN_MESSAGE),1)
+	CFLAGS  += -DENABLE_FEAT_F4HWN_MESSAGE
 endif
 ifeq ($(ENABLE_EXTRA_UART_CMD),1)
 	CFLAGS  += -DENABLE_EXTRA_UART_CMD

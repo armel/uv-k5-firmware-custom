@@ -24,6 +24,9 @@
 #ifdef ENABLE_AIRCOPY
     #include "app/aircopy.h"
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    #include "app/message.h"
+#endif
 #include "app/app.h"
 #include "app/chFrScanner.h"
 #include "app/dtmf.h"
@@ -97,6 +100,10 @@ void (*ProcessKeysFunctions[])(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld) 
 
 #ifdef ENABLE_AIRCOPY
     [DISPLAY_AIRCOPY] = &AIRCOPY_ProcessKeys,
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    [DISPLAY_MESSAGE] = &MESSAGE_ProcessKeys,
 #endif
 };
 
@@ -799,6 +806,17 @@ static void CheckRadioInterrupts(void)
             AIRCOPY_StorePacket();
         }
 #endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+        if (interrupts.fskFifoAlmostFull && gScreenToDisplay == DISPLAY_MESSAGE)
+        {
+            for (unsigned int i = 0; i < 4; i++) {
+                gMsg_FSK_Buffer[gFSKWriteIndex++] = BK4819_ReadRegister(BK4819_REG_5F);
+            }
+
+            MESSAGE_StorePacket();
+        }
+#endif
     }
 }
 
@@ -1358,7 +1376,11 @@ void APP_TimeSlice10ms(void)
     gFlashLightBlinkCounter++;
 
 #ifdef ENABLE_AM_FIX
-    if (gRxVfo->Modulation == MODULATION_AM) {
+    if (gRxVfo->Modulation == MODULATION_AM
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+        && gScreenToDisplay != DISPLAY_MESSAGE
+#endif
+    ) {
         AM_fix_10ms(gEeprom.RX_VFO);
     }
 #endif
@@ -1501,6 +1523,12 @@ void APP_TimeSlice10ms(void)
         if (!AIRCOPY_SendMessage()) {
             GUI_DisplayScreen();
         }
+    }
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    if (gScreenToDisplay == DISPLAY_MESSAGE) {
+        MESSAGE_TimeSlice10ms();
     }
 #endif
 

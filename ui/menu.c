@@ -164,6 +164,9 @@ const t_menu_item MenuList[] =
     {"SetNWR",      MENU_NOAA_S    },
 #endif
 #endif
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+    {"Msg",         MENU_MESSAGE       },
+#endif
     // hidden menu items from here on
     // enabled if pressing both the PTT and upper side button at power-on
     {"F Lock",      MENU_F_LOCK        },
@@ -989,6 +992,12 @@ void UI_DisplayMenu(void)
                 strcpy(String, "NULL");
             else
                 memcpy(String, Contact, 8);
+            break;
+#endif
+
+#ifdef ENABLE_FEAT_F4HWN_MESSAGE
+        case MENU_MESSAGE:
+            strcpy(String, "PRESS\nMENU");
             break;
 #endif
 

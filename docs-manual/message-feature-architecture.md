@@ -142,6 +142,37 @@ stateDiagram-v2
     SET_FREQ --> INBOX: 6th digit applies, or EXIT
 ```
 
+### Compose-text input (multi-tap)
+
+`MSG_UI_COMPOSE_TEXT`'s digit-key handling implements classic phone-keypad multi-tap
+rather than the plain per-character `UP`/`DOWN` ASCII-increment used by every other
+free-text field in this firmware (e.g. the channel-name editor in `app/menu.c`) — typing
+a letter by incrementing one ASCII value at a time from a space (32) takes dozens of
+presses per character, which was the original motivation for this scheme.
+
+`kMultitapGroups[10]` (`app/message.c`) is a static table of the standard phone-keypad
+letter groups, indexed by `Key - KEY_0`. Three pieces of state, private to
+`app/message.c` since the provisional letter is written straight into
+`gMsgComposeText[gMsgComposeIndex]` (the existing rendering code shows it with no
+changes needed), drive the cycling:
+
+- `gMsgMultitapKey` — `KEY_INVALID` when no letter is mid-cycle, else the digit key
+  currently being repeated.
+- `gMsgMultitapIndex` — position within that key's letter group.
+- `gMsgMultitapCountdown_10ms` — ticks left (`MSG_MULTITAP_TIMEOUT_10MS` = 90, 900ms)
+  before the letter auto-commits, decremented in `MESSAGE_TimeSlice10ms()`.
+
+`MESSAGE_CommitMultitapChar()` is the single finalize point (advances
+`gMsgComposeIndex`, resets the pending-key state) — called from the timeout, from `#`
+("commit now"), from the digit handler itself when a *different* key interrupts a
+cycle, and from `KEY_STAR`/`KEY_MENU` so switching input mode or sending never
+silently drops a letter still mid-cycle. `gMsgInputMode` (`MSG_InputMode_t`, extern'd
+for `ui/message.c`'s footer indicator) gates the whole scheme: `MSG_INPUT_DIGIT` mode
+bypasses the table entirely and reproduces the original instant-digit behavior
+byte-for-byte, so numeric entry was never regressed. `KEY_UP`/`KEY_DOWN` remain a
+fallback, taking over fine per-character control (and canceling any pending multi-tap
+state) for anything not reachable through a letter group.
+
 ### TX state (`MSG_TxState_t`, driven by `MESSAGE_TimeSlice10ms()`, a 10ms scheduler
 hook wired into `APP_TimeSlice10ms()` in `app/app.c`)
 

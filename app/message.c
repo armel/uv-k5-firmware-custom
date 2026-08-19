@@ -50,6 +50,34 @@ char               gMsgComposeText[MSG_TEXT_MAX + 1];
 unsigned int       gMsgComposeIndex;
 uint32_t           gMsgComposeDestID;
 bool               gMsgComposeBroadcast;
+MSG_InputMode_t    gMsgInputMode;
+
+// Multi-tap letter groups, standard phone-keypad convention, indexed by Key-KEY_0.
+// Digit-entry mode bypasses this table entirely (see MSG_INPUT_DIGIT handling below).
+static const char *const kMultitapGroups[10] = {
+    " ",          // KEY_0 -- space
+    ".,!?'-",     // KEY_1 -- punctuation (dash lives here instead of its own key)
+    "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ",
+};
+
+static KEY_Code_t gMsgMultitapKey = KEY_INVALID;  // KEY_INVALID when nothing is mid-cycle
+static uint8_t    gMsgMultitapIndex;
+static uint16_t   gMsgMultitapCountdown_10ms;
+
+// Finalizes whatever multi-tap letter is currently mid-cycle (if any), advancing the
+// cursor. The single place that "confirms" a letter -- called on timeout, on an
+// explicit commit key, or before starting a new letter/leaving the screen, so a
+// pending letter is never silently lost.
+static void MESSAGE_CommitMultitapChar(void)
+{
+    if (gMsgMultitapKey != KEY_INVALID) {
+        if (gMsgComposeIndex < MSG_TEXT_MAX) {
+            gMsgComposeIndex++;
+        }
+        gMsgMultitapKey = KEY_INVALID;
+        gMsgMultitapCountdown_10ms = 0;
+    }
+}
 
 static MSG_DataPacket_t gMsgPendingPacket;
 static bool              gMsgIsBroadcast;
@@ -268,6 +296,15 @@ void MESSAGE_TimeSlice10ms(void)
         gUpdateDisplay = true;
     }
 
+    // Auto-commit a pending multi-tap letter after a short pause, same as a classic
+    // phone keypad.
+    if (gMsgMultitapKey != KEY_INVALID
+        && gMsgUiMode == MSG_UI_COMPOSE_TEXT
+        && --gMsgMultitapCountdown_10ms == 0) {
+        MESSAGE_CommitMultitapChar();
+        gUpdateDisplay = true;
+    }
+
     if (gMsgPendingAckToSend) {
         gMsgPendingAckToSend = false;
         MESSAGE_TransmitFrame(MSG_TYPE_ACK, &gMsgPendingAck);
@@ -431,6 +468,8 @@ static void MESSAGE_BeginComposeText(void)
     gMsgComposeIndex = 0;
     memset(gMsgComposeText, ' ', MSG_TEXT_MAX);
     gMsgComposeText[MSG_TEXT_MAX] = 0;
+    gMsgInputMode      = MSG_INPUT_UPPER;
+    gMsgMultitapKey    = KEY_INVALID;
     gMsgUiMode = MSG_UI_COMPOSE_TEXT;
 }
 
@@ -592,20 +631,61 @@ void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
         case MSG_UI_COMPOSE_TEXT:
             if (Key <= KEY_9) {
-                if (gMsgComposeIndex < MSG_TEXT_MAX) {
-                    gMsgComposeText[gMsgComposeIndex++] = '0' + Key - KEY_0;
+                if (gMsgInputMode == MSG_INPUT_DIGIT) {
+                    if (gMsgComposeIndex < MSG_TEXT_MAX) {
+                        gMsgComposeText[gMsgComposeIndex++] = '0' + Key - KEY_0;
+                    }
+                } else if (gMsgComposeIndex < MSG_TEXT_MAX) {
+                    const char *group = kMultitapGroups[Key - KEY_0];
+                    const unsigned int groupLen = strlen(group);
+                    bool canWrite = true;
+
+                    if (Key == gMsgMultitapKey && gMsgMultitapCountdown_10ms > 0) {
+                        // Same key again before the timeout: cycle to the next
+                        // letter in this group, same character slot.
+                        gMsgMultitapIndex = (gMsgMultitapIndex + 1) % groupLen;
+                    } else {
+                        // A different key, or the previous one already timed
+                        // out: finalize whatever was pending and start fresh.
+                        MESSAGE_CommitMultitapChar();
+                        if (gMsgComposeIndex < MSG_TEXT_MAX) {
+                            gMsgMultitapKey   = Key;
+                            gMsgMultitapIndex = 0;
+                        } else {
+                            canWrite = false; // that commit filled the buffer
+                        }
+                    }
+
+                    if (canWrite) {
+                        char c = group[gMsgMultitapIndex];
+                        if (gMsgInputMode == MSG_INPUT_LOWER && c >= 'A' && c <= 'Z') {
+                            c += 32;
+                        }
+                        gMsgComposeText[gMsgComposeIndex] = c;
+                        gMsgMultitapCountdown_10ms = MSG_MULTITAP_TIMEOUT_10MS;
+                    }
                 }
             } else if (Key == KEY_STAR) {
-                if (gMsgComposeIndex < MSG_TEXT_MAX) {
-                    gMsgComposeText[gMsgComposeIndex++] = '-';
-                }
+                // Mode toggle: ABC -> abc -> 123 -> ABC. Commit first so
+                // switching mode never drops an in-progress letter.
+                MESSAGE_CommitMultitapChar();
+                gMsgInputMode = (gMsgInputMode == MSG_INPUT_DIGIT)
+                    ? MSG_INPUT_UPPER
+                    : (MSG_InputMode_t)(gMsgInputMode + 1);
             } else if (Key == KEY_F) {
-                // "next" key: advances the cursor without forcing a space,
-                // used to accept a character picked with UP/DOWN.
-                if (gMsgComposeIndex < MSG_TEXT_MAX) {
+                // "commit now" -- confirms a pending multi-tap letter
+                // immediately, or just advances the cursor otherwise (used to
+                // accept a character picked with UP/DOWN).
+                if (gMsgMultitapKey != KEY_INVALID) {
+                    MESSAGE_CommitMultitapChar();
+                } else if (gMsgComposeIndex < MSG_TEXT_MAX) {
                     gMsgComposeIndex++;
                 }
             } else if (Key == KEY_UP || Key == KEY_DOWN) {
+                // Hand fine control of the current character to UP/DOWN --
+                // no longer a multi-tap cycle once this is used.
+                gMsgMultitapKey = KEY_INVALID;
+                gMsgMultitapCountdown_10ms = 0;
                 if (gMsgComposeIndex < MSG_TEXT_MAX) {
                     static const char unwanted[] = "$%&!\"':;?^`|{}";
                     const int8_t direction = (Key == KEY_UP) ? 1 : -1;
@@ -620,12 +700,18 @@ void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
                     gMsgComposeText[gMsgComposeIndex] = (c < 32) ? 126 : (c > 126) ? 32 : c;
                 }
             } else if (Key == KEY_EXIT) {
-                if (gMsgComposeIndex == 0) {
+                if (gMsgMultitapKey != KEY_INVALID) {
+                    // Cancel the in-progress letter rather than committing it.
+                    gMsgComposeText[gMsgComposeIndex] = ' ';
+                    gMsgMultitapKey = KEY_INVALID;
+                    gMsgMultitapCountdown_10ms = 0;
+                } else if (gMsgComposeIndex == 0) {
                     gMsgUiMode = gMsgComposeBroadcast ? MSG_UI_INBOX : MSG_UI_COMPOSE_ID;
                 } else {
                     gMsgComposeIndex--;
                 }
             } else if (Key == KEY_MENU) {
+                MESSAGE_CommitMultitapChar();
                 if (gMsgComposeIndex > 0) {
                     MESSAGE_BeginSend((uint16_t)gMsgComposeDestID, gMsgComposeBroadcast,
                                        gMsgComposeText, (uint8_t)gMsgComposeIndex);

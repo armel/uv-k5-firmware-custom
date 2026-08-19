@@ -118,7 +118,9 @@ void UI_DisplayMessage(void)
             }
             UI_PrintStringSmallNormal(line, 2, 127, 4);
 
-            sprintf(String, "%u/%u", gMsgComposeIndex, MSG_TEXT_MAX);
+            sprintf(String, "%u/%u %s", gMsgComposeIndex, MSG_TEXT_MAX,
+                    gMsgInputMode == MSG_INPUT_UPPER ? "ABC" :
+                    gMsgInputMode == MSG_INPUT_LOWER ? "abc" : "123");
             UI_PrintStringSmallNormal(String, 2, 127, 6);
             break;
         }

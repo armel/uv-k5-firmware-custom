@@ -34,6 +34,7 @@
 #define MSG_TX_MAX_RETRIES        3u
 #define MSG_ACK_TIMEOUT_10MS      80u
 #define MSG_BROADCAST_REPEAT_10MS 30u
+#define MSG_MULTITAP_TIMEOUT_10MS 90u
 
 typedef struct __attribute__((packed)) {
     uint16_t senderID;
@@ -69,6 +70,13 @@ enum MSG_UiMode_t {
 };
 typedef enum MSG_UiMode_t MSG_UiMode_t;
 
+enum MSG_InputMode_t {
+    MSG_INPUT_UPPER = 0,
+    MSG_INPUT_LOWER,
+    MSG_INPUT_DIGIT,
+};
+typedef enum MSG_InputMode_t MSG_InputMode_t;
+
 enum MSG_TxState_t {
     MSG_TX_IDLE = 0,
     MSG_TX_SENDING,
@@ -103,6 +111,7 @@ extern char               gMsgComposeText[MSG_TEXT_MAX + 1];
 extern unsigned int       gMsgComposeIndex;
 extern uint32_t           gMsgComposeDestID;
 extern bool               gMsgComposeBroadcast;
+extern MSG_InputMode_t    gMsgInputMode;  // multi-tap mode; shown in the compose footer
 
 void MESSAGE_Enter(void);
 void MESSAGE_Exit(void);

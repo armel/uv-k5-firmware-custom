@@ -64,15 +64,39 @@ for confirming a transmission is actually reaching you (see
 2. You're asked **TO ID?** — type the destination radio's ID with the number keys,
    or press `*` instead to send a **broadcast** to every listening radio (no ID
    needed). Press `MENU` to confirm, or `EXIT` to back out.
-3. Type your message (up to 58 characters):
-   - Number keys type digits directly and move to the next character.
-   - `UP` / `DOWN` cycle the character under the cursor through letters and symbols
-     (without moving the cursor).
-   - `*` inserts a dash and moves on.
-   - `#` moves to the next character without changing it — use this to accept a
-     letter you picked with `UP`/`DOWN`.
-   - `EXIT` moves the cursor back one place (backspace); at the very start, backs
-     out to the destination screen.
+3. Type your message (up to 58 characters) using **multi-tap**, the same style as
+   texting on an old phone keypad — the number keys are grouped into letters just
+   like a phone dial pad:
+
+   | Key | Letters |
+   |---|---|
+   | `0` | space |
+   | `1` | `. , ! ? ' -` |
+   | `2` | A B C |
+   | `3` | D E F |
+   | `4` | G H I |
+   | `5` | J K L |
+   | `6` | M N O |
+   | `7` | P Q R S |
+   | `8` | T U V |
+   | `9` | W X Y Z |
+
+   Press a key repeatedly to cycle through its letters (e.g. `4` `4` `4` types "I").
+   After about a second of no further presses on that key, the letter is
+   locked in and the cursor moves on automatically — or press `#` to lock it in
+   immediately without waiting. Pressing a *different* key always locks in
+   whatever you were just typing first.
+
+   - `*` **switches input mode**: `ABC` → `abc` → `123` → back to `ABC`. The
+     current mode is shown at the bottom of the screen (e.g. `12/58 abc`). In
+     `123` mode, number keys type digits directly instead of cycling letters —
+     use this for phone numbers, coordinates, etc.
+   - `UP` / `DOWN` fine-tune the character at the cursor one step at a time
+     through the full symbol set — a fallback for anything not on a letter
+     group above.
+   - `EXIT` cancels a letter that's still mid-cycle (before it locks in), or
+     otherwise backspaces one character; at the very start, backs out to the
+     destination screen.
    - `MENU` sends the message.
 4. You'll see **SENDING...**, then one of:
    - **DELIVERED** — a direct message was acknowledged by the recipient.

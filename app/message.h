@@ -41,11 +41,28 @@
 #define MSG_BROADCAST_REPEAT_10MS 30u
 #define MSG_MULTITAP_TIMEOUT_10MS 90u
 // DTMF page burst, sent once per outgoing unicast message ahead of the FSK
-// data: "AD" + 5-digit destID + 5-digit senderID, zero-padded. 'A'/'D' are
-// deliberately used as the marker -- real handheld mic keypads have no A-D
-// buttons, so this can't collide with anything a human actually dials.
-#define MSG_PAGE_MARKER           "AD"
-#define MSG_PAGE_LEN              12u
+// data: "*#" + 2-digit destID + 2-digit senderID, base-14 encoded (below).
+// '*'/'#' are deliberately used as the marker and excluded from the payload
+// alphabet -- real handheld mic keypads have no way to dial them either, so
+// this can't collide with anything a human actually dials, AND (unlike a
+// marker drawn from the same alphabet as the payload) it can never collide
+// with a legitimately-encoded ID's own digits either.
+#define MSG_PAGE_MARKER           "*#"
+#define MSG_PAGE_LEN              6u
+// Station IDs are plain decimal 1..MSG_STATION_ID_MAX for entry/display (see
+// MSG_UI_MYID/MSG_UI_COMPOSE_ID) -- only MESSAGE_SendPage()/
+// MESSAGE_HandleDtmfDigit() convert to/from base-14 DTMF digits, purely as an
+// efficient wire format for the over-the-air page. Base-14 (not base-16)
+// because the marker above must stay outside the payload's alphabet: DTMF
+// has exactly 16 possible tones (0-9, A-D, *, #), and reserving '*'/'#' for
+// the marker leaves 14 usable payload symbols. Two base-14 digits address
+// 14*14=196 values (0..195); ID 0 is reserved (see settings.c's blank-EEPROM
+// fallback), so the usable range is 1..195.
+#define MSG_STATION_ID_MAX        195u
+// Base-14 alphabet for DTMF page digits -- deliberately excludes '*'/'#'
+// (reserved for MSG_PAGE_MARKER above) so the marker can never appear inside
+// a legitimately-encoded ID.
+#define MSG_PAGE_BASE14_DIGITS    "0123456789ABCD"
 // Fixed rather than gEeprom.DTMF_CODE_PERSIST_TIME/DTMF_CODE_INTERVAL_TIME:
 // those default to 100ms/100ms and aren't exposed anywhere in this fork's
 // menu to retune, and 100ms proved too short to decode reliably on the
@@ -149,9 +166,9 @@ void MESSAGE_StorePacket(void);
 void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
 // Fed one decoded DTMF character at a time from app/app.c's CheckRadioInterrupts(),
 // independent of ENABLE_DTMF_CALLING/gSetting_live_DTMF_decoder so paging works
-// with just this feature compiled in. Matches a trailing MSG_PAGE_MARKER + 10
-// digit run against a rolling buffer; on a full match addressed to our own
-// Radio ID it auto-switches into Msg mode with no user action.
+// with just this feature compiled in. Matches a trailing MSG_PAGE_MARKER + 4
+// base-14 digit run against a rolling buffer; on a full match addressed to our
+// own Radio ID it auto-switches into Msg mode with no user action.
 void MESSAGE_HandleDtmfDigit(char c);
 
 #endif

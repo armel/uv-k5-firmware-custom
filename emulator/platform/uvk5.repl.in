@@ -92,3 +92,11 @@ sysbus:
         Tag <0x400B8800, 0x400B8FFF> "SPI1"
         Tag <0x400BD000, 0x400BD7FF> "AES"
         Tag <0x40000800, 0x40000FFF> "PMU"
+        // GPIOA/GPIOC only implement DATA/DIR (0x0/0x4) -- confirmed against
+        // hardware/dp32g030/gpio.def, the whole GPIO register template has
+        // nothing else -- but each bank still reserves a full 0x800 block.
+        // Tag the unused remainder explicitly so a stray access there (never
+        // expected, but not otherwise ruled out) shows up labeled instead of
+        // as a generic "non-existing peripheral" warning.
+        Tag <0x40060008, 0x400607FF> "GPIOA_RESERVED"
+        Tag <0x40061008, 0x400617FF> "GPIOC_RESERVED"

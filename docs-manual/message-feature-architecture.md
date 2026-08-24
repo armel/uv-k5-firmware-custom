@@ -279,30 +279,45 @@ FSK. Broadcasts have no single destination to page and skip this entirely.
 
 ### Page format
 
-`MESSAGE_SendPage()` (`app/message.c`) builds a fixed-width, 12-character
+`MESSAGE_SendPage()` (`app/message.c`) builds a fixed-width, 6-character
 (`MSG_PAGE_LEN`) DTMF string with no delimiter needed between fields:
 
 ```
-"AD" + destID(5 digits, zero-padded) + senderID(5 digits, zero-padded)
+"*#" + destID(2 base-14 digits) + senderID(2 base-14 digits)
 ```
 
-`MSG_PAGE_MARKER` ("AD") deliberately uses letters A-D: real handheld mic keypads
-have no physical buttons for them, so a marker built from them can't collide with
-anything a human actually dials, or with unrelated repeater control tones — a
-stronger guarantee than an arbitrary numeric prefix would give. `BK4819_PlayDTMF()`
-(`driver/bk4819.c`) supports the full 16-symbol alphabet in firmware regardless of
-what a physical keypad can produce, so this costs nothing on the TX side.
+Station IDs are base-14 encoded, not decimal: DTMF has exactly 16 possible tones
+(0-9, A-D, `*`, `#`), and reserving `*`/`#` for the marker leaves 14 usable payload
+symbols (`0123456789ABCD`, `MSG_PAGE_BASE14_DIGITS`). Two base-14 digits address
+`14*14=196` values (0..195, with 0 reserved — see `settings.c`'s blank-EEPROM
+fallback), giving `MSG_STATION_ID_MAX=195` as the usable range. This is
+deliberately *not* full hex/base-16: that would need `A`-`D` in the payload
+alphabet too, which would break the marker's collision-safety property below.
+Entry/display (`MSG_UI_MYID`/`MSG_UI_COMPOSE_ID`) is always plain decimal
+(1-195, up to 3 digits) — base-14 is purely an internal wire-format detail of
+`MESSAGE_SendPage()`/`MESSAGE_HandleDtmfDigit()`, never user-facing.
+
+`MSG_PAGE_MARKER` ("`*#`") deliberately uses symbols excluded from the base-14
+payload alphabet: real handheld mic keypads have no physical buttons for them
+either, so a marker built from them can't collide with anything a human actually
+dials or with unrelated repeater control tones — AND, unlike a marker drawn from
+the same alphabet as the payload, a legitimately-encoded ID's own digits can never
+reproduce it by coincidence. `BK4819_PlayDTMF()` (`driver/bk4819.c`) supports the
+full 16-symbol alphabet in firmware regardless of what a physical keypad can
+produce, so this costs nothing on the TX side.
 
 `MESSAGE_HandleDtmfDigit()` is fed one decoded character at a time from
 `CheckRadioInterrupts()` (`app/app.c`), independent of
 `ENABLE_DTMF_CALLING`/`gSetting_live_DTMF_decoder` so paging works with just
-`ENABLE_FEAT_F4HWN_MESSAGE` compiled in. It keeps a rolling 12-character window
+`ENABLE_FEAT_F4HWN_MESSAGE` compiled in. It keeps a rolling 6-character window
 (shift left, append) and checks the *oldest* two characters against the marker
 every time the window fills — a plain sliding-window match, not something aligned
 to a fixed count since boot, so it's robust to arbitrary characters (chatter, other
 DTMF traffic) appearing immediately before a real page. No inter-character timeout
-is needed for the same reason the marker itself is safe: an accidental 12-character
-run starting with "AD" from unrelated traffic is already vanishingly unlikely.
+is needed for the same reason the marker itself is safe: an accidental 6-character
+run starting with "`*#`" from unrelated traffic is already vanishingly unlikely,
+and (per the base-14/marker-exclusion design above) a real page's own payload
+digits can never produce a false match either.
 
 On a full match: if `destID` doesn't match this radio's own `gEeprom.RADIO_ID`, it's
 silently ignored (the page is for someone else sharing the frequency). Otherwise
@@ -367,7 +382,9 @@ fields default to 100ms/100ms and aren't exposed anywhere in this fork's menu to
 retune ("D Prel" and "D ST" are DTMF-related menu entries that exist, but affect
 `DTMF_PRELOAD_TIME`/`DTMF_SIDE_TONE` instead — neither is read by
 `MESSAGE_SendPage()`). Total page airtime is `MSG_PAGE_LEN × (MSG_PAGE_TONE_MS +
-MSG_PAGE_GAP_MS)`. Tuning history from the bench, once the three conflicts above
+MSG_PAGE_GAP_MS)` — 1.2s at current constants (halved from 2.4s when the page was
+still 12 characters, before the base-14 encoding above shortened it to 6). Tuning
+history from the bench, once the three conflicts above
 were fixed: 100ms/100ms (the original default) produced only the mute/unmute click,
 no decodable tone; 500ms/100ms decoded reliably. As of this writing the constants
 are set to 100ms/100ms again to re-test now that the actual root causes are fixed —

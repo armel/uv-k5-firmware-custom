@@ -51,11 +51,11 @@ the main screen the way `EXIT` does.
 
 ## Setting your radio ID
 
-Every radio needs a small numeric ID (1–65534) that identifies it to others. Set it
+Every radio needs a small numeric ID (1–195) that identifies it to others. Set it
 once per radio; it's saved to EEPROM and survives power-off.
 
 1. From the Inbox, press `*`.
-2. Type the ID with the number keys (up to 5 digits).
+2. Type the ID with the number keys (up to 3 digits).
 3. Press `MENU` to save, or `EXIT` to cancel.
 
 Your current ID is always shown in the bottom-left of the Inbox screen (`ID:<n>`).

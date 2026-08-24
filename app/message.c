@@ -235,6 +235,28 @@ static void MESSAGE_TransmitFrame(uint8_t type, const void *payload64)
     BK4819_PrepareFSKReceive();
 }
 
+// Encodes a 0..195 station ID as 2 base-14 digits (see MSG_PAGE_BASE14_DIGITS'
+// comment in message.h for why base-14, not base-16 or decimal).
+static void MESSAGE_EncodeBase14(char *out, uint16_t value)
+{
+    static const char digits[] = MSG_PAGE_BASE14_DIGITS;
+    out[0] = digits[(value / 14u) % 14u];
+    out[1] = digits[value % 14u];
+}
+
+// Reverse of MESSAGE_EncodeBase14(); returns -1 if c isn't a valid base-14
+// digit (e.g. it's the marker's '*'/'#', or unrelated DTMF chatter).
+static int MESSAGE_DecodeBase14Digit(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'A' && c <= 'D') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
 // Sent once ahead of a unicast message so a receiver who isn't even in Msg
 // mode yet can be paged: DTMF is decoded continuously in the background on
 // any normal voice channel (BK4819_EnableDTMF() is unconditional in
@@ -245,7 +267,10 @@ static void MESSAGE_TransmitFrame(uint8_t type, const void *payload64)
 static void MESSAGE_SendPage(uint16_t destID)
 {
     char code[MSG_PAGE_LEN + 1];
-    sprintf(code, MSG_PAGE_MARKER "%05u%05u", destID, gEeprom.RADIO_ID);
+    memcpy(code, MSG_PAGE_MARKER, 2);
+    MESSAGE_EncodeBase14(&code[2], destID);
+    MESSAGE_EncodeBase14(&code[4], gEeprom.RADIO_ID);
+    code[MSG_PAGE_LEN] = 0;
 
     // functions.c's FUNCTION_Transmit() does this before every normal PTT
     // transmission, with the comment "if DTMF is enabled when TX'ing, it
@@ -567,11 +592,13 @@ void MESSAGE_StorePacket(void)
 }
 
 // Rolling window of the last MSG_PAGE_LEN decoded DTMF characters. No
-// staleness timeout: MSG_PAGE_MARKER ('A'/'D') can't be produced by a real
+// staleness timeout: MSG_PAGE_MARKER ('*'/'#') can't be produced by a real
 // mic keypad, so an accidental full-pattern match from unrelated chatter is
 // already astronomically unlikely without one, and adding a timer would just
 // mean re-plumbing a periodic tick into a path that runs whether or not
-// we're anywhere near the Msg screen.
+// we're anywhere near the Msg screen. The marker is also excluded from the
+// base-14 payload alphabet (message.h), so a legitimately-encoded ID's own
+// digits can never reproduce it either.
 static char    gMsgPageBuf[MSG_PAGE_LEN + 1];
 static uint8_t gMsgPageLen;
 
@@ -594,14 +621,14 @@ void MESSAGE_HandleDtmfDigit(char c)
 
     uint16_t destID   = 0;
     uint16_t senderID = 0;
-    for (unsigned int i = 0; i < 5; i++) {
-        const char destDigit   = gMsgPageBuf[2 + i];
-        const char senderDigit = gMsgPageBuf[7 + i];
-        if (destDigit < '0' || destDigit > '9' || senderDigit < '0' || senderDigit > '9') {
+    for (unsigned int i = 0; i < 2; i++) {
+        const int destDigit   = MESSAGE_DecodeBase14Digit(gMsgPageBuf[2 + i]);
+        const int senderDigit = MESSAGE_DecodeBase14Digit(gMsgPageBuf[4 + i]);
+        if (destDigit < 0 || senderDigit < 0) {
             return;
         }
-        destID   = (destID   * 10) + (destDigit   - '0');
-        senderID = (senderID * 10) + (senderDigit - '0');
+        destID   = (destID   * 14u) + (uint16_t)destDigit;
+        senderID = (senderID * 14u) + (uint16_t)senderDigit;
     }
 
     gMsgPageLen = 0; // consumed -- a retry of the exact same page can trigger again
@@ -635,11 +662,14 @@ static void MESSAGE_BeginComposeText(void)
 }
 
 // Shared by MSG_UI_MYID and MSG_UI_COMPOSE_ID: digit append and
-// exit/backspace behave identically in both screens.
+// exit/backspace behave identically in both screens. Entry is always plain
+// decimal (up to 3 digits for MSG_STATION_ID_MAX=195) -- the base-14 DTMF
+// wire encoding (message.h) is an internal detail of MESSAGE_SendPage()/
+// MESSAGE_HandleDtmfDigit(), never exposed to the user.
 static bool MESSAGE_IdEntryDigitOrExit(KEY_Code_t Key)
 {
     if (Key <= KEY_9) {
-        if (gInputBoxIndex < 5) {
+        if (gInputBoxIndex < 3) {
             INPUTBOX_Append(Key);
         }
         return true;
@@ -761,7 +791,7 @@ void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         case MSG_UI_MYID:
             if (!MESSAGE_IdEntryDigitOrExit(Key) && Key == KEY_MENU) {
                 uint32_t id = StrToUL(INPUTBOX_GetAscii());
-                if (id >= 1 && id <= 0xFFFE) {
+                if (id >= 1 && id <= MSG_STATION_ID_MAX) {
                     gEeprom.RADIO_ID = (uint16_t)id;
                     SETTINGS_SaveRadioID();
                     gMsgUiMode = MSG_UI_INBOX;
@@ -780,7 +810,7 @@ void MESSAGE_ProcessKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
                 MESSAGE_BeginComposeText();
             } else if (Key == KEY_MENU) {
                 uint32_t id = StrToUL(INPUTBOX_GetAscii());
-                if (id >= 1 && id <= 0xFFFE) {
+                if (id >= 1 && id <= MSG_STATION_ID_MAX) {
                     gMsgComposeDestID    = id;
                     gMsgComposeBroadcast = false;
                     MESSAGE_BeginComposeText();

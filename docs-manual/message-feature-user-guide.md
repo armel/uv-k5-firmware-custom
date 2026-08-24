@@ -113,18 +113,48 @@ for confirming a transmission is actually reaching you (see
      otherwise backspaces one character; at the very start, backs out to the
      destination screen.
    - `MENU` sends the message.
-4. You'll see **SENDING...**, then one of:
+4. You'll see **SENDING...** (with a `RETRIES LEFT <n>` counter underneath for
+   direct messages, so a long wait doesn't look frozen), then one of:
    - **DELIVERED** — a direct message was acknowledged by the recipient.
    - **SENT** — a broadcast went out (broadcasts are never acknowledged).
-   - **NO REPLY** — a direct message got no acknowledgment after 3 retries
-     (roughly 3.5 seconds total).
+   - **NO REPLY** — a direct message got no acknowledgment after all retries were
+     used up (up to about a minute — see below for why it's this long).
 
    This screen returns to the Inbox on its own after a moment, or immediately if
    you press `EXIT`.
 
-Direct messages are automatically retried up to 3 times if no acknowledgment comes
-back. Broadcasts are sent twice in a row for better odds of being heard, since
-there's no acknowledgment to confirm they landed.
+Direct messages are automatically retried for up to about **a minute** if no
+acknowledgment comes back (20 retries, 3 seconds apart) — long enough to cover
+[the automatic page](#getting-paged-automatically-direct-messages-only) below,
+since a person (not a radio that's already listening) needs real time to notice it
+and switch into Message mode. Broadcasts are sent twice in a row for better odds of
+being heard, since there's no acknowledgment to confirm they landed, and they don't
+send a page (see below).
+
+## Getting paged automatically (direct messages only)
+
+You don't need the recipient to already be sitting in Message mode. Sending a
+**direct** message (not a broadcast) automatically transmits a short DTMF "page" —
+a couple of seconds of touch-tone-style beeps — immediately before the message data
+itself. Any radio on that frequency decodes DTMF continuously in the background,
+even while just sitting on the normal VFO screen doing voice — so if the page is
+addressed to your radio ID, your radio automatically jumps into Message mode by
+itself, no button press needed, and briefly shows **PAGED BY \<id\>** on the Inbox
+screen while the actual message catches up behind it over the next few retries.
+
+A few things worth knowing about this:
+
+- It only happens for **direct** messages — broadcasts have no single recipient to
+  page, so they skip this step entirely and behave exactly as before.
+- The page is a one-shot: it's sent once, then only the message data itself gets
+  retried. If the page itself doesn't get through cleanly (DTMF has no error
+  correction of its own), the auto-switch won't happen and the recipient needs to
+  already be in Message mode, or you need to tell them some other way (e.g. over
+  voice) to switch over.
+- It won't interrupt you if you're mid-transmission (talking) when a page for you
+  arrives — the radio waits until it's actually listening.
+- If you're already in Message mode when paged, nothing visibly changes (you're
+  already where you need to be to receive the message).
 
 ## Reading a message
 
@@ -166,9 +196,13 @@ message attempt apart from unrelated radio noise:
 
 ## Known limitations
 
-- **Foreground only.** Message only sends and receives while its screen is actually
-  open. If you're back on the main VFO screen, or in the middle of a voice
-  transmission, incoming messages are simply missed — there's no background
+- **Message data itself is foreground only.** The actual message content only sends
+  and receives while the Message screen is open — that part hasn't changed. What's
+  new is that a **direct** message now automatically pages you out of the normal VFO
+  screen first (see [above](#getting-paged-automatically-direct-messages-only)), so
+  in practice you often don't have to be in Message mode ahead of time anymore for
+  direct messages. **Broadcasts still don't page** — if you're not already watching
+  the Inbox, a broadcast sent your way is simply missed, with no background
   listening or queuing.
 - **No encryption.** Message content is lightly obfuscated (the same scheme AirCopy
   uses) to avoid it looking like a plain analog signal, but this is not security —
@@ -197,3 +231,13 @@ If messages aren't getting through:
    sanity-check the underlying radio link independent of Message — see the
    [architecture doc](message-feature-architecture.md#relationship-to-aircopy) for
    why the two share so much plumbing.
+5. **If the automatic page isn't auto-switching a receiving radio out of the VFO
+   screen**, check whether DTMF itself is even getting through independent of
+   Message: turn on the stock **"D Live"** menu setting (live DTMF decoder) on the
+   receiving radio while it sits on the normal VFO screen, and watch for a
+   `"DTMF ..."` line to appear when the other radio sends a direct message. If
+   nothing shows up at all, DTMF isn't being heard/decoded on that link (an
+   RF-level or hardware problem, not specific to Message); if it shows garbled or
+   only partial characters, the page timing may need to be tuned for your radios —
+   see [`MSG_PAGE_TONE_MS`/`MSG_PAGE_GAP_MS`](message-feature-architecture.md#dtmf-paging)
+   in the architecture doc.

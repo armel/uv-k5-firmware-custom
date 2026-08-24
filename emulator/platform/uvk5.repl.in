@@ -1,0 +1,94 @@
+// UV-K5 (DP32G030) platform description for Renode.
+//
+// No prior Renode/QEMU support exists for this chip (verified), so this is
+// built from scratch as a generic Cortex-M0 + a custom memory map, matching
+// firmware.ld and bsp/dp32g030/*.h exactly. `@@EMU_DIR@@` is substituted by
+// scripts/run.sh with this repo's absolute emulator/ directory before
+// Renode loads this file, since Python.PythonPeripheral's `filename:` path
+// resolution is not reliably relative-to-this-file across Renode versions.
+//
+// See docs: PERIPHERALS.md in this directory for what's modeled vs stubbed.
+
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m0"
+    nvic: nvic
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+    // SysTick is the ONLY interrupt this firmware actually enables (see the
+    // architecture doc) -- 48MHz matches SYSTICK_Init()/UART_Init()'s
+    // internal-RC-oscillator assumption, giving the firmware's
+    // SysTick_Config(480000) its intended 10ms tick.
+    systickFrequency: 48000000
+    IRQ -> cpu@0
+
+flash: Memory.MappedMemory @ sysbus 0x00000000
+    size: 0xF000
+
+ram: Memory.MappedMemory @ sysbus 0x20000000
+    size: 0x4000
+
+// --- Trivial scratch peripherals: accept writes, echo back on read, no
+// side effects. Safe per the hardware inventory: nothing in this firmware's
+// Phase-1-relevant code paths depends on these actually functioning, only
+// on not hanging/faulting when touched. ---
+
+syscon: Python.PythonPeripheral @ sysbus 0x40000000
+    size: 0x800
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/stub_register_bank.py"
+
+portcon: Python.PythonPeripheral @ sysbus 0x400B0000
+    size: 0x800
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/stub_register_bank.py"
+
+gpiob: Python.PythonPeripheral @ sysbus 0x40060800
+    size: 0x800
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/stub_register_bank.py"
+
+uart1: Python.PythonPeripheral @ sysbus 0x4006B800
+    size: 0x800
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/stub_register_bank.py"
+
+// --- Peripherals needing specific behavior to avoid hanging boot ---
+
+spi0: Python.PythonPeripheral @ sysbus 0x400B8000
+    size: 0x800
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/spi0_model.py"
+
+saradc: Python.PythonPeripheral @ sysbus 0x400BA000
+    size: 0x800
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/saradc_model.py"
+
+// --- "Virtual devices": bit-banged protocols reconstructed from the
+// GPIO master's perspective (see each script's header comment) ---
+
+gpioa: Python.PythonPeripheral @ sysbus 0x40060000
+    size: 0x8
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/gpioa_bitbang.py"
+
+gpioc: Python.PythonPeripheral @ sysbus 0x40061000
+    size: 0x8
+    initable: true
+    filename: "@@EMU_DIR@@/peripherals/gpioc_bitbang.py"
+
+// --- Everything else: never touched by this firmware (confirmed via the
+// hardware inventory) -- tag as unimplemented rather than writing stub
+// peripherals for each. Renode returns 0 for reads/ignores writes here. ---
+
+sysbus:
+    init:
+        Tag <0x40001000, 0x400011FF> "DMA"
+        Tag <0x40003000, 0x400037FF> "CRC"
+        Tag <0x4006B000, 0x4006B7FF> "UART0"
+        Tag <0x4006C000, 0x4006C7FF> "UART2"
+        Tag <0x4006F000, 0x4006F7FF> "FLASH_CTRL"
+        Tag <0x400B4000, 0x400B47FF> "PWM_PLUS0"
+        Tag <0x400B8800, 0x400B8FFF> "SPI1"
+        Tag <0x400BD000, 0x400BD7FF> "AES"
+        Tag <0x40000800, 0x40000FFF> "PMU"

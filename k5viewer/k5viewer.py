@@ -32,6 +32,8 @@ TYPE_DIFF = b'\x02'
 # Framebuffer
 framebuffer = bytearray([0] * FRAME_SIZE)
 
+DEBUG = False
+
 
 COLOR_SETS = {  # {key: (name, foreground, background)}
     "g": ("Grey", pygame.Color(0, 0, 0), pygame.Color(202, 202, 202)),
@@ -45,9 +47,12 @@ DEFAULT_COLOR = "g"  # Must be a key of "COLOR_SETS"
 def send_keepalive(ser: serial.Serial):
     # Send keepalive frame
     try:
-        ser.write(b'\x55\xAA\x00\x00')  # Keepalive frame
-    except serial.SerialException:
-        pass
+        n = ser.write(b'\x55\xAA\x00\x00')  # Keepalive frame
+        if DEBUG:
+            print(f"[debug] sent keepalive, {n} bytes written, in_waiting={ser.in_waiting}")
+    except serial.SerialException as e:
+        if DEBUG:
+            print(f"[debug] keepalive write failed: {e}")
 
 def read_frame(ser: serial.Serial) -> bytearray:
     global framebuffer
@@ -59,21 +64,35 @@ def read_frame(ser: serial.Serial) -> bytearray:
             print("[!] Your USB serial cable is probably being used by another application such as Chirp or Chrome.")
             sys.exit(1)
         if not b:
+            if DEBUG:
+                print("[debug] read timeout, no byte received")
             return None
+        if DEBUG:
+            print(f"[debug] byte: {b.hex()}")
         if b == HEADER[0:1]:
             b2 = ser.read(1)
+            if DEBUG:
+                print(f"[debug] header[0] matched, byte2: {b2.hex() if b2 else '(timeout)'}")
             if b2 == HEADER[1:2]:
                 t = ser.read(1)
                 size_bytes = ser.read(2)
                 size = int.from_bytes(size_bytes, 'big')
+                if DEBUG:
+                    print(f"[debug] header matched: type={t.hex() if t else '(timeout)'} size={size}")
                 if t == TYPE_SCREENSHOT and size == FRAME_SIZE:
                     payload = ser.read(FRAME_SIZE)
                     framebuffer = bytearray(payload)
+                    if DEBUG:
+                        print(f"[debug] got full screenshot frame, {len(payload)} bytes")
                     return framebuffer
                 elif t == TYPE_DIFF and size % 9 == 0:
                     payload = ser.read(size)
                     framebuffer = apply_diff(framebuffer, payload)
+                    if DEBUG:
+                        print(f"[debug] got diff frame, {len(payload)} bytes")
                     return framebuffer
+                elif DEBUG:
+                    print(f"[debug] unrecognized type/size combo, dropping")
 
 
 def apply_diff(framebuffer: bytearray, diff_payload: bytes) -> bytearray:
@@ -199,9 +218,12 @@ def main():
     )
     parser.add_argument("--list-ports", action="store_true", help="list available ports and exit")
     parser.add_argument("--port", type=str, help="serial port to use (in place of 'DEFAULT_PORT')")
+    parser.add_argument("--debug", action="store_true", help="print raw serial byte/frame debug info")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}", help="show program's version number and exit")
 
     args = parser.parse_args()
+    global DEBUG
+    DEBUG = args.debug
     if args.list_ports:
         cmd_list_ports(args)
         exit(0)

@@ -10,6 +10,8 @@ built that way. For how to use the feature on the radio, see the
 - Send a short text message to a specific radio, or broadcast to everyone, over the
   air, without any external hardware.
 - Confirm delivery for direct messages; tolerate loss for broadcasts.
+- Reach a receiver who isn't already sitting in Message mode, for direct messages —
+  see [DTMF paging](#dtmf-paging).
 - Fit inside the DP32G030's very tight 60K flash budget, alongside all the other
   optional features this fork already carries.
 - Don't disturb the user's normal channel configuration — a Message session should
@@ -126,6 +128,12 @@ forces:
   looking, at a glance, like "the same channel."
 - `freq_config_RX/TX.CodeType = CODE_TYPE_OFF` — no CTCSS/DCS tone riding on top of
   the FSK deviation.
+- `Compander = 0` — found the hard way on the bench: a channel with audio compander
+  enabled compresses/expands the FSK tone's amplitude enough that the correlator
+  never syncs at all (frame count stuck at 0 with a matching frequency and visible
+  RF energy on both ends). AirCopy never hits this because its fresh `VFO_Info_t` is
+  zeroed by `RADIO_InitInfo()`, which defaults `Compander` to 0; Message has to zero
+  it explicitly since it's patching fields on top of the user's live channel instead.
 - `OUTPUT_POWER = OUTPUT_POWER_HIGH`, followed by `RADIO_ConfigureSquelchAndOutputPower()`
   (which recomputes the calibration-derived `TXP_CalculatedSetting` that
   `RADIO_SetTxParameters()` actually reads) — favors range over AirCopy's own choice
@@ -200,22 +208,27 @@ hook wired into `APP_TimeSlice10ms()` in `app/app.c`)
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    IDLE --> SENDING: MESSAGE_BeginSend()
+    IDLE --> SENDING: MESSAGE_BeginSend() (unicast: MESSAGE_SendPage() fires once, synchronously, first)
     SENDING --> WAIT_ACK: unicast
     SENDING --> BC_GAP: broadcast, repeats remaining
     SENDING --> ACKED: broadcast, no repeats left (fire-and-forget "sent")
     BC_GAP --> SENDING: 300ms elapsed
     WAIT_ACK --> ACKED: matching ACK received
-    WAIT_ACK --> SENDING: 800ms elapsed, retries remaining
-    WAIT_ACK --> FAILED: 800ms elapsed, no retries left
+    WAIT_ACK --> SENDING: 3s elapsed, retries remaining
+    WAIT_ACK --> FAILED: 3s elapsed, no retries left
     ACKED --> IDLE: result shown for ~1s
     FAILED --> IDLE: result shown for ~1.5s
 ```
 
-Retry budget: `MSG_TX_MAX_RETRIES = 3` (4 attempts total), `MSG_ACK_TIMEOUT_10MS =
-80` (800ms per attempt) — bounding worst-case latency for an unacknowledged direct
-message to roughly 3.5-4 seconds. Broadcasts send `MSG_BROADCAST_REPEAT_10MS = 30`
-(300ms) apart, twice total, with no ACK wait.
+Retry budget: `MSG_TX_MAX_RETRIES = 20`, `MSG_ACK_TIMEOUT_10MS = 300` (3s per
+attempt) — bounding worst-case latency for an unacknowledged direct message to
+roughly a minute. This is deliberately much longer than it needs to be for two
+radios that are both already sitting in Message mode (the original values were
+`3` retries / `80` (800ms), a ~3.5s worst case) — the budget was expanded
+specifically to give [DTMF paging](#dtmf-paging) enough real wall-clock time for a
+*person*, not an already-listening radio, to notice the page and switch screens.
+Broadcasts, which don't page, still send `MSG_BROADCAST_REPEAT_10MS = 30` (300ms)
+apart, twice total, with no ACK wait — unchanged.
 
 ## RX pipeline
 
@@ -248,6 +261,119 @@ message to roughly 3.5-4 seconds. Broadcasts send `MSG_BROADCAST_REPEAT_10MS = 3
    faded) and resets/re-arms the receiver, counting it in `gMsgRxPartial` — without
    this, a stalled partial capture would sit invisibly forever with no trace on
    screen and no way to receive a subsequent frame.
+
+## DTMF paging
+
+The FSK transport above only works while both radios already have the Message
+screen open — fine once a conversation is underway, but useless for reaching
+someone who's just sitting on a normal voice channel. DTMF solves the opposite
+problem: it's far too slow and has no error correction, so it can't carry the
+message text itself, but the BK4819's DTMF decoder is a *separate* hardware block
+(`BK4819_EnableDTMF()`, `REG_21`/`REG_24`) from the FSK modem, and it's enabled
+unconditionally by `RADIO_SetupRegisters()` (`radio.c`) on every normal voice
+channel — meaning it's already listening in the background, all the time, with no
+mode switch and no interference with voice audio. So a **direct** message now
+transmits a short DTMF "page" first, to get a not-yet-listening receiver to switch
+into Message mode by itself; the message data itself still only ever travels over
+FSK. Broadcasts have no single destination to page and skip this entirely.
+
+### Page format
+
+`MESSAGE_SendPage()` (`app/message.c`) builds a fixed-width, 12-character
+(`MSG_PAGE_LEN`) DTMF string with no delimiter needed between fields:
+
+```
+"AD" + destID(5 digits, zero-padded) + senderID(5 digits, zero-padded)
+```
+
+`MSG_PAGE_MARKER` ("AD") deliberately uses letters A-D: real handheld mic keypads
+have no physical buttons for them, so a marker built from them can't collide with
+anything a human actually dials, or with unrelated repeater control tones — a
+stronger guarantee than an arbitrary numeric prefix would give. `BK4819_PlayDTMF()`
+(`driver/bk4819.c`) supports the full 16-symbol alphabet in firmware regardless of
+what a physical keypad can produce, so this costs nothing on the TX side.
+
+`MESSAGE_HandleDtmfDigit()` is fed one decoded character at a time from
+`CheckRadioInterrupts()` (`app/app.c`), independent of
+`ENABLE_DTMF_CALLING`/`gSetting_live_DTMF_decoder` so paging works with just
+`ENABLE_FEAT_F4HWN_MESSAGE` compiled in. It keeps a rolling 12-character window
+(shift left, append) and checks the *oldest* two characters against the marker
+every time the window fills — a plain sliding-window match, not something aligned
+to a fixed count since boot, so it's robust to arbitrary characters (chatter, other
+DTMF traffic) appearing immediately before a real page. No inter-character timeout
+is needed for the same reason the marker itself is safe: an accidental 12-character
+run starting with "AD" from unrelated traffic is already vanishingly unlikely.
+
+On a full match: if `destID` doesn't match this radio's own `gEeprom.RADIO_ID`, it's
+silently ignored (the page is for someone else sharing the frequency). Otherwise
+`gMsgPagedBySenderID` is set (surfaced on the Inbox as "PAGED BY \<id\>", cleared
+automatically after ~3s by `MESSAGE_TimeSlice10ms()`) and, unless
+`gScreenToDisplay` is already `DISPLAY_MESSAGE`, the radio auto-switches using the
+exact same three calls the manual menu entry point uses
+(`MESSAGE_Enter(); GUI_SelectNextDisplay(DISPLAY_MESSAGE); gRequestDisplayScreen = DISPLAY_INVALID;`).
+No deferral logic is needed for "don't interrupt an active transmission" — the
+enclosing `if (gCurrentFunction != FUNCTION_TRANSMIT)` in `CheckRadioInterrupts()`
+already means this code path structurally never runs while the radio is keyed up
+on its own outgoing audio.
+
+### Three register conflicts found transmitting the page
+
+`MESSAGE_SendPage()` keys up cold, the same way `MESSAGE_TransmitFrame()` already
+does for the FSK burst (`RADIO_SetTxParameters()`, no `FUNCTION_Select()`) — but
+generating actual DTMF tones this way, from a radio that's mid-Message-session,
+turned out to conflict with the FSK setup in three distinct, previously-undocumented
+ways, each one found by bench-testing with a monitoring radio and only fixed once
+isolated:
+
+1. **DTMF decode left enabled during TX corrupts TX audio filtering.**
+   `functions.c`'s `FUNCTION_Transmit()` — the normal PTT entry point — calls
+   `BK4819_DisableDTMF()` right before keying up, with an explicit author comment:
+   *"if DTMF is enabled when TX'ing, it changes the TX audio filtering!!"*.
+   `MESSAGE_Enter()` leaves the DTMF decoder running (inherited from
+   `RADIO_SetupRegisters()`), and `MESSAGE_SendPage()` never goes through
+   `FUNCTION_Transmit()` to get that disable for free. Fix: call
+   `BK4819_DisableDTMF()` before `RADIO_SetTxParameters()`, and `BK4819_EnableDTMF()`
+   again at the end (after `MESSAGE_RearmModem()`) so the sender can still hear a
+   page sent back to it while sitting in Message mode — a normal PTT release gets
+   this back "for free" via `RADIO_SetupRegisters()`, but this path doesn't.
+2. **`REG_58`'s FSK-enable bits are still active while generating DTMF tones.**
+   Neither `RADIO_SetTxParameters()` nor `BK4819_EnterDTMF_TX()` touch `REG_58`, so
+   it's still holding `MESSAGE_SetupModem()`'s FSK configuration
+   (`0x00C1`) the whole time the tone generator is supposed to be producing plain
+   dual-tone DTMF. `driver/bk4819.c`'s own `BK4819_PlayRogerMDC()` treats this as
+   something that must be explicitly undone ("disable FSK") before reusing the tone
+   generator for anything else. Fix: `BK4819_WriteRegister(BK4819_REG_58, 0x0000)`
+   before `BK4819_EnterDTMF_TX()`; `MESSAGE_RearmModem()` at the end already restores
+   it correctly for the FSK burst that follows.
+3. **`BK4819_EnterDTMF_TX()`'s `bLocalLoopback` parameter isn't just a local-sidetone
+   toggle.** It selects `BK4819_AF_BEEP` (`true`) vs `BK4819_AF_MUTE` (`false`) as
+   the AF source; passing `false` (on the assumption that it only controlled whether
+   the *sender* hears their own tones) produced a real, keyed-up carrier with
+   **zero** audible tone on a monitoring radio — not garbled, silent. `DTMF_Reply()`
+   (`app/dtmf.c`, the working reference path used by manual DTMF dialing) passes
+   `gEeprom.DTMF_SIDE_TONE` here, which defaults `true` on a blank EEPROM
+   (`settings.c`) — explaining why manual dialing worked over the air while this
+   hardcoded `false` didn't transmit an audible tone at all. Fix: pass `true`.
+   `DTMF_Reply()` also pairs that with `AUDIO_AudioPathOn(); gEnableSpeaker = true;`
+   immediately before, and turns both off right after — without that pairing, only
+   the mute/unmute click at each digit's boundary came through (audible as "poc
+   poc"), not a real tone in between. `MESSAGE_SendPage()` now mirrors both calls.
+
+### Page timing
+
+`MSG_PAGE_TONE_MS`/`MSG_PAGE_GAP_MS` (`app/message.h`) are fixed constants, not
+`gEeprom.DTMF_CODE_PERSIST_TIME`/`DTMF_CODE_INTERVAL_TIME` — those EEPROM-backed
+fields default to 100ms/100ms and aren't exposed anywhere in this fork's menu to
+retune ("D Prel" and "D ST" are DTMF-related menu entries that exist, but affect
+`DTMF_PRELOAD_TIME`/`DTMF_SIDE_TONE` instead — neither is read by
+`MESSAGE_SendPage()`). Total page airtime is `MSG_PAGE_LEN × (MSG_PAGE_TONE_MS +
+MSG_PAGE_GAP_MS)`. Tuning history from the bench, once the three conflicts above
+were fixed: 100ms/100ms (the original default) produced only the mute/unmute click,
+no decodable tone; 500ms/100ms decoded reliably. As of this writing the constants
+are set to 100ms/100ms again to re-test now that the actual root causes are fixed —
+**treat this value with suspicion and re-verify empirically** rather than assuming
+either the 100ms or 500ms result still applies, since both were measured under
+different sets of fixes.
 
 ## The beep/FSK register conflict
 
@@ -296,12 +422,13 @@ value (`0xFFFF`) or `0` defaults to radio ID `1`.
 
 | File | Role |
 |---|---|
-| `app/message.h` | Wire format structs, UI/TX state enums, shared globals |
-| `app/message.c` | Transport (frame build/parse), TX/RX state machines, EEPROM ID, key handling |
-| `ui/message.h` / `ui/message.c` | Screen rendering for every `MSG_UiMode_t` |
+| `app/message.h` | Wire format structs, UI/TX state enums, shared globals, `MSG_PAGE_*` constants |
+| `app/message.c` | Transport (frame build/parse), TX/RX state machines, EEPROM ID, key handling, `MESSAGE_SendPage()`/`MESSAGE_HandleDtmfDigit()` (DTMF paging) |
+| `ui/message.h` / `ui/message.c` | Screen rendering for every `MSG_UiMode_t`, "PAGED BY \<id\>" banner, `RETRIES LEFT` counter |
 | `settings.h` / `settings.c` | `RADIO_ID` field, `SETTINGS_SaveRadioID()` |
-| `app/app.c` | Screen/key dispatch table entries, FSK RX interrupt hook, 10ms scheduler hook |
+| `app/app.c` | Screen/key dispatch table entries, FSK RX interrupt hook, DTMF-digit hook (`MESSAGE_HandleDtmfDigit()` call in `CheckRadioInterrupts()`), 10ms scheduler hook |
 | `audio.c` | `MESSAGE_RearmModem()` call after beeps (register-reuse fix) |
+| `driver/bk4819.c` | `BK4819_EnableDTMF()`/`DisableDTMF()`, `BK4819_EnterDTMF_TX()`/`PlayDTMFString()`/`ExitDTMF_TX()` — reused for the page, not modified |
 | `ui/menu.c` / `ui/menu.h` | "Msg" menu entry, `gSubMenu_SIDEFUNCTIONS[]` "MSG" option |
 | `ui/ui.h` / `ui/ui.c` | `DISPLAY_MESSAGE` screen enum + dispatch |
 | `app/action.c` / `app/action.h` | `ACTION_Message()`, the assignable side-key entry point |
@@ -320,10 +447,20 @@ in code — verify actual headroom for any given feature combination with
 
 ## Design tradeoffs and known limitations
 
-- **Foreground-only.** RX is only armed while `gScreenToDisplay == DISPLAY_MESSAGE`.
-  There is no background listening mode — implementing one would mean making
-  Message's FSK RX coexist with normal squelch/voice RX simultaneously, which the
-  BK4819's single demodulator path doesn't support without much deeper changes.
+- **FSK RX is still foreground-only.** The message data itself is only ever armed
+  while `gScreenToDisplay == DISPLAY_MESSAGE` — implementing true background
+  listening for the *data* would mean making Message's FSK RX coexist with normal
+  squelch/voice RX simultaneously, which the BK4819's single demodulator path
+  doesn't support without much deeper changes. [DTMF paging](#dtmf-paging) works
+  around this for direct messages specifically, by using the chip's independent
+  DTMF decoder block (which *does* already run continuously in the background) to
+  trigger the switch into Message mode automatically — but broadcasts, which have
+  no single destination to page, still have no way to reach a radio that isn't
+  already watching the Inbox.
+- **DTMF has no error correction.** Unlike the FSK transport (CRC + ACK + retry),
+  a garbled page simply fails silently — there's no retry of the page itself, only
+  of the message data that follows it. A receiver that misses the page still needs
+  to already be in Message mode, or be told some other way to switch over.
 - **Obfuscation, not encryption.** The XOR scheme (inherited from AirCopy) deters
   casual over-the-air readability, not a determined listener; there is no
   authentication either, so a receiver has no way to verify a claimed `senderID` is

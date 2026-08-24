@@ -31,6 +31,7 @@ if [ -z "$EEPROM_FILE" ]; then
 fi
 export UVK5_EEPROM_FILE="$EEPROM_FILE"
 export UVK5_KEYBOARD_PORT="${UVK5_KEYBOARD_PORT:-9812}"
+export UVK5_PTT_PORT="${UVK5_PTT_PORT:-9813}"
 
 MONITOR_PORT="${UVK5_MONITOR_PORT:-8888}"
 
@@ -38,10 +39,11 @@ echo "Firmware:    $FIRMWARE_ELF"
 echo "EEPROM file: $EEPROM_FILE"
 echo "Monitor:     telnet 127.0.0.1 $MONITOR_PORT"
 echo "Keyboard:    127.0.0.1 $UVK5_KEYBOARD_PORT"
+echo "PTT:         127.0.0.1 $UVK5_PTT_PORT"
 echo
 echo "In another terminal, once this is running:"
 echo "  $EMU_DIR/host_tools/display_viewer.py --elf \"$FIRMWARE_ELF\" --monitor-port $MONITOR_PORT"
-echo "  $EMU_DIR/host_tools/keyboard_bridge.py --port \"$UVK5_KEYBOARD_PORT\""
+echo "  $EMU_DIR/host_tools/keyboard_bridge.py --port \"$UVK5_KEYBOARD_PORT\" --ptt-port \"$UVK5_PTT_PORT\""
 echo
 
 exec renode --disable-xwt -P "$MONITOR_PORT" \

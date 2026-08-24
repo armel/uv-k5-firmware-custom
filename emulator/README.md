@@ -59,12 +59,12 @@ two real bugs using the emulator itself.
 |---|---|
 | CPU | Real `cortex-m0` core (Renode `CPU.CortexM`), matching this firmware's `-mcpu=cortex-m0` build flag exactly |
 | FLASH / RAM | Real memory, sized from `firmware.ld` (60K / 16K) |
-| SysTick | Real, via Renode's NVIC (`systickFrequency: 48000000`) — the only interrupt this firmware actually uses |
+| SysTick | Real, via Renode's NVIC (`systickFrequency: 48000000`) — the only interrupt this firmware actually uses. Not just an assumption: `driver/spi.c`/`driver/adc.c` do call `NVIC_EnableIRQ` for SPI0/SPI1/SARADC, but only `if (IE != 0)`, and every call site that actually configures those peripherals (`SPI0_Init`, `board.c`'s ADC setup) explicitly sets every interrupt-enable field to 0/disabled — so those `NVIC_EnableIRQ` calls are live code paths that just never execute with this firmware's own config values. |
 | SYSCON, PORTCON, GPIOB, UART1 | Trivial scratch registers — store writes, echo on read, no side effects (`peripherals/stub_register_bank.py`) |
 | SPI0 | Scratch registers, except `FIFOST`'s TX-FIFO-full bit always reads "not full" (an *unbounded* poll in `driver/st7565.c`'s `ST7565_Init` hangs boot forever otherwise) — see `peripherals/spi0_model.py` |
 | SARADC | Scratch registers, except every channel's EOC status bit always reads "conversion complete" (another *unbounded* poll, in `board.c`'s `BOARD_ADC_GetBatteryInfo`) — see `peripherals/saradc_model.py` |
 | GPIOA | **Real logic**: reconstructs the bit-banged I2C/EEPROM protocol (`driver/i2c.c`/`driver/eeprom.c`) *and* the keyboard row/column scan (`driver/keyboard.c`) from the GPIO master's perspective — see `peripherals/gpioa_bitbang.py` |
-| GPIOC | **Real logic**: reconstructs the bit-banged BK4819 register read/write protocol (`driver/bk4819.c`) as a shallow register-value bookkeeping stub (no RF/DTMF/FSK behavior — that's Phase 2), plus a plain PTT input — see `peripherals/gpioc_bitbang.py` |
+| GPIOC | **Real logic**: reconstructs the bit-banged BK4819 register read/write protocol (`driver/bk4819.c`) as a shallow register-value bookkeeping stub (no RF/DTMF/FSK behavior — that's Phase 2), plus a controllable PTT input (its own socket, same pattern as the keyboard — see `host_tools/keyboard_bridge.py`'s PTT button) — see `peripherals/gpioc_bitbang.py` |
 | Everything else (IIC0/IIC1, TIMER, RTC, watchdogs, CMP, PWM_BASE, DMA, CRC, UART0/2, flash controller, PWM_PLUS0, SPI1, AES, PMU) | Tagged as unimplemented in `sysbus: init:` — never touched by this firmware (confirmed by direct source inspection), so real modeling would be wasted effort |
 
 Display output is **not** rendered by decoding SPI0 traffic — `host_tools/display_viewer.py`
@@ -100,6 +100,31 @@ Esc=EXIT, `*`=STAR, `f`=F, `[`/`]`=SIDE1/SIDE2, 0-9). Held buttons highlight
 green, whether pressed by mouse or by the matching keyboard shortcut. Labels
 are drawn with a small built-in bitmap font rather than `pygame.font`, so the
 keypad renders identically even on pygame builds missing SDL_ttf.
+
+There's also a **PTT button** (or the Space bar) below the keypad grid, on
+its own red bar — PTT is a separate GPIO port from the keyboard matrix
+(GPIOC, not GPIOA), so it's wired through its own socket
+(`emulator/peripherals/gpioc_bitbang.py`'s PTT bridge, default port 9813,
+override with `UVK5_PTT_PORT` / `--ptt-port`) rather than reusing the
+keyboard one. This only exercises `app/app.c`'s TX-state transitions
+(`gPttIsPressed`, `gCurrentFunction`, screen changes) — there's no real
+RF/audio behind it, that's still Phase 2 scope. Note it can immediately
+trigger a `BAT LOW` warning that blocks the transmit: that's the firmware
+correctly reacting to `saradc_model.py`'s fixed placeholder battery reading
+(see Known limitations below), not a PTT wiring bug.
+
+**Every press is held for at least 250ms in real time, even if you tap
+faster than that.** `app/app.c`'s `CheckKeys()` only treats a key as
+genuinely pressed once `KEYBOARD_Poll()` reads it as held across 2
+*consecutive* polls, and this emulator runs well over 10x slower than real
+time (see the regression test note below), so a fast real-world tap can
+easily release before the firmware completes even one poll cycle — the
+press just gets silently dropped by the debounce logic, which looks like
+"some keypresses don't reach the radio." 250ms was picked empirically: short
+taps (~20ms) reliably got dropped without this, while holds long enough to
+cross `app/app.c`'s `key_repeat_delay_10ms` (400ms) started firing extra
+repeat presses on top of the first (e.g. jumping several menu items instead
+of one) — 250ms sits in the middle with margin on both sides.
 
 Options: `--eeprom PATH`, `--monitor-port N`, `--keyboard-port N`,
 `--no-keyboard` (view-only, skip key injection), `--test` (run the regression

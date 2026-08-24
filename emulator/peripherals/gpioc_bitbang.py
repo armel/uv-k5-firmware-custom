@@ -10,9 +10,18 @@
 #     written by firmware, so it defaults to 0 via the dict's .get(..., 0) --
 #     which is exactly "nothing pending," so that polling loop always exits
 #     immediately with no special-casing needed.
-#   - PTT, a plain input on pin 5 (active low -- 1 = not pressed).
+#   - PTT, a plain input on pin 5 (active low -- 1 = not pressed), controlled
+#     the same way the keyboard is: a background socket accepting
+#     'PTTDOWN'/'PTTUP' lines (see host_tools/keyboard_bridge.py's PTT
+#     button). This only exercises app/app.c's TX-state transitions
+#     (gCurrentFunction/gPttIsPressed, screen changes, etc.) -- there's no
+#     real RF/audio behind it, that's Phase 2 scope.
 #
 # DIR bit convention (bsp/dp32g030/gpio.h): 1 = output, 0 = input.
+
+import os
+import socket
+import threading
 
 PIN_SCN = 0
 PIN_SCL = 1
@@ -21,6 +30,8 @@ PIN_PTT = 5
 
 OFFSET_DATA = 0x0
 OFFSET_DIR = 0x4
+
+PTT_BRIDGE_PORT = int(os.environ.get("UVK5_PTT_PORT", "9813"))
 
 
 def get_bit(value, bit):
@@ -31,6 +42,43 @@ def set_bit(value, bit, bitval):
     if bitval:
         return value | (1 << bit)
     return value & ~(1 << bit)
+
+
+def start_ptt_bridge(state, lock):
+    """Background thread: accepts one client (host_tools/keyboard_bridge.py)
+    and applies its 'PTTDOWN' / 'PTTUP' lines to state['pressed']. Best-
+    effort, mirroring gpioa_bitbang.py's keyboard bridge -- if sockets/
+    threading don't work in this context, PTT just degrades to "never
+    pressed" rather than crashing peripheral init."""
+
+    def serve():
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", PTT_BRIDGE_PORT))
+        srv.listen(1)
+        while True:
+            conn, _ = srv.accept()
+            buf = b""
+            try:
+                while True:
+                    chunk = conn.recv(256)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while b"\n" in buf:
+                        line, buf = buf.split(b"\n", 1)
+                        action = line.decode(errors="ignore").strip()
+                        with lock:
+                            if action == "PTTDOWN":
+                                state["pressed"] = True
+                            elif action == "PTTUP":
+                                state["pressed"] = False
+            finally:
+                conn.close()
+
+    t = threading.Thread(target=serve)
+    t.daemon = True
+    t.start()
 
 
 if request.IsInit:
@@ -50,6 +98,13 @@ if request.IsInit:
     current_addr = 0
     read_value = 0
     read_bit_index = 0
+
+    ptt_state = {"pressed": False}
+    ptt_lock = threading.Lock()
+    try:
+        start_ptt_bridge(ptt_state, ptt_lock)
+    except Exception as e:
+        self.WarningLog("PTT bridge socket failed to start: %s" % str(e))
 
 elif request.IsWrite:
     old_data = data
@@ -116,7 +171,9 @@ elif request.IsRead:
         # Output-configured bits (per DIR) echo back what was last written;
         # PTT and (while mid-read) SDA are the only inputs we compute.
         if get_bit(direction, PIN_PTT) == 0:
-            value = set_bit(value, PIN_PTT, 1)  # never pressed in Phase 1
+            with ptt_lock:
+                pressed = ptt_state["pressed"]
+            value = set_bit(value, PIN_PTT, 0 if pressed else 1)  # active low
         if phase == "READ_DATA" and get_bit(direction, PIN_SDA) == 0:
             if read_bit_index < 16:
                 bit_val = (read_value >> (15 - read_bit_index)) & 1

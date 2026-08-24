@@ -49,6 +49,7 @@ KEY_MAP = {
     pygame.K_f: "F",
     pygame.K_LEFTBRACKET: "SIDE1",
     pygame.K_RIGHTBRACKET: "SIDE2",
+    pygame.K_SPACE: "PTT",
     pygame.K_0: "0", pygame.K_KP0: "0",
     pygame.K_1: "1", pygame.K_KP1: "1",
     pygame.K_2: "2", pygame.K_KP2: "2",
@@ -122,6 +123,8 @@ BG = (30, 30, 30)
 BTN = (70, 70, 75)
 BTN_HELD = (60, 160, 90)
 BTN_BORDER = (110, 110, 115)
+PTT_BTN = (110, 60, 55)
+PTT_BTN_HELD = (200, 60, 50)
 TEXT = (230, 230, 230)
 LEGEND_TEXT = (150, 150, 150)
 
@@ -131,15 +134,16 @@ COLS, ROWS = 4, 5
 GRID_W = COLS * BTN_W + (COLS - 1) * GAP
 GRID_H = ROWS * BTN_H + (ROWS - 1) * GAP
 HEADER_H = 24
+PTT_H = 40
 LEGEND_LINES = [
     "KEYBOARD SHORTCUTS:",
     "ARROWS UP/DOWN  ENTER MENU  ESC EXIT",
-    "* STAR  F F  [ / ] SIDE1/SIDE2  0-9",
+    "* STAR  F F  [ / ] SIDE1/SIDE2  0-9  SPACE PTT",
 ]
 LEGEND_H = len(LEGEND_LINES) * 16 + 8
 
 WIN_W = GRID_W + 2 * MARGIN
-WIN_H = HEADER_H + GRID_H + LEGEND_H + 3 * MARGIN
+WIN_H = HEADER_H + GRID_H + GAP + PTT_H + LEGEND_H + 3 * MARGIN
 
 
 def build_buttons():
@@ -154,26 +158,44 @@ def build_buttons():
     return buttons
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=9812)
-    args = parser.parse_args()
+def build_ptt_button():
+    top = MARGIN + HEADER_H + GRID_H + GAP
+    return pygame.Rect(MARGIN, top, GRID_W, PTT_H)
 
+
+def connect(host, port, label):
     sock = None
     for attempt in range(20):
         try:
-            sock = socket.create_connection((args.host, args.port), timeout=2)
+            sock = socket.create_connection((host, port), timeout=2)
             break
         except (ConnectionRefusedError, OSError):
             time.sleep(0.5)
     if sock is None:
-        raise SystemExit("could not connect to emulator keyboard socket at %s:%d "
-                          "(is the emulator running?)" % (args.host, args.port))
+        raise SystemExit("could not connect to emulator %s socket at %s:%d "
+                          "(is the emulator running?)" % (label, host, port))
+    return sock
 
-    def send(action, name):
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=9812)
+    parser.add_argument("--ptt-port", type=int, default=9813)
+    args = parser.parse_args()
+
+    kb_sock = connect(args.host, args.port, "keyboard")
+    ptt_sock = connect(args.host, args.ptt_port, "PTT")
+
+    def send_kb(action, name):
         try:
-            sock.sendall(("%s %s\n" % (action, name)).encode())
+            kb_sock.sendall(("%s %s\n" % (action, name)).encode())
+        except OSError:
+            pass
+
+    def send_ptt(action):
+        try:
+            ptt_sock.sendall(("%s\n" % action).encode())
         except OSError:
             pass
 
@@ -182,8 +204,54 @@ def main():
     pygame.display.set_caption("UV-K5 Emulator Keypad")
 
     buttons = build_buttons()
+    ptt_rect = build_ptt_button()
     active_keys = set()
+    press_time = {}
+    pending_release = {}
     mouse_down_key = None
+
+    # app/app.c's CheckKeys() only treats a key as genuinely pressed once
+    # KEYBOARD_Poll() reads it as held across 2 *consecutive* polls
+    # (key_debounce_10ms) -- and this emulator can run well over 10x slower
+    # than real time (every bit-banged GPIO access round-trips through an
+    # interpreted Python peripheral script, and one keyboard scan alone is a
+    # few dozen of those), so a quick tap can easily release before the
+    # firmware completes even one poll cycle, and the debounce logic just
+    # silently drops it. Guarantee every press is held for at least this
+    # long in real time, regardless of how fast the user releases it.
+    #
+    # 0.25s was picked empirically against a live emulator: a ~20ms tap
+    # reliably got dropped, while holds long enough to cross app.c's own
+    # key_repeat_delay_10ms (400ms) started firing *extra* repeat presses on
+    # top of the first (e.g. jumping several menu items instead of one).
+    # 0.25s sits in the middle with margin on both sides -- comfortably
+    # above the debounce floor, comfortably below the repeat threshold.
+    MIN_HOLD_SECONDS = 0.25
+
+    def send_action(key_name, is_down):
+        # PTT lives on its own socket/protocol (emulator/peripherals/
+        # gpioc_bitbang.py's PTT bridge) since it's a separate GPIO port
+        # from the keyboard matrix -- everything else goes to the keyboard
+        # bridge (gpioa_bitbang.py).
+        if key_name == "PTT":
+            send_ptt("PTTDOWN" if is_down else "PTTUP")
+        else:
+            send_kb("KEYDOWN" if is_down else "KEYUP", key_name)
+
+    def press(key_name):
+        pending_release.pop(key_name, None)
+        if key_name not in active_keys:
+            active_keys.add(key_name)
+            send_action(key_name, True)
+        press_time[key_name] = time.time()
+
+    def release(key_name):
+        elapsed = time.time() - press_time.get(key_name, 0)
+        if elapsed >= MIN_HOLD_SECONDS:
+            active_keys.discard(key_name)
+            send_action(key_name, False)
+        else:
+            pending_release[key_name] = press_time[key_name] + MIN_HOLD_SECONDS
 
     running = True
     while running:
@@ -192,30 +260,37 @@ def main():
                 running = False
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                for key_name, rect in buttons:
-                    if rect.collidepoint(event.pos):
-                        mouse_down_key = key_name
-                        active_keys.add(key_name)
-                        send("KEYDOWN", key_name)
-                        break
+                if ptt_rect.collidepoint(event.pos):
+                    mouse_down_key = "PTT"
+                    press("PTT")
+                else:
+                    for key_name, rect in buttons:
+                        if rect.collidepoint(event.pos):
+                            mouse_down_key = key_name
+                            press(key_name)
+                            break
 
             elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
                 if mouse_down_key is not None:
-                    active_keys.discard(mouse_down_key)
-                    send("KEYUP", mouse_down_key)
+                    release(mouse_down_key)
                     mouse_down_key = None
 
             elif event.type == pygame.KEYDOWN:
                 name = KEY_MAP.get(event.key)
                 if name:
-                    active_keys.add(name)
-                    send("KEYDOWN", name)
+                    press(name)
 
             elif event.type == pygame.KEYUP:
                 name = KEY_MAP.get(event.key)
                 if name:
-                    active_keys.discard(name)
-                    send("KEYUP", name)
+                    release(name)
+
+        now = time.time()
+        for key_name, release_at in list(pending_release.items()):
+            if now >= release_at:
+                del pending_release[key_name]
+                active_keys.discard(key_name)
+                send_action(key_name, False)
 
         screen.fill(BG)
         draw_text(screen, "UV-K5 EMULATOR KEYPAD", MARGIN, MARGIN // 2, 2, TEXT)
@@ -229,16 +304,26 @@ def main():
             th = 7 * scale
             draw_text(screen, key_name, rect.centerx - tw // 2, rect.centery - th // 2, scale, TEXT)
 
-        legend_y = MARGIN + HEADER_H + GRID_H + MARGIN
+        ptt_held = "PTT" in active_keys
+        pygame.draw.rect(screen, PTT_BTN_HELD if ptt_held else PTT_BTN, ptt_rect, border_radius=6)
+        pygame.draw.rect(screen, BTN_BORDER, ptt_rect, width=1, border_radius=6)
+        tw = text_width("PTT", 2)
+        draw_text(screen, "PTT", ptt_rect.centerx - tw // 2, ptt_rect.centery - 7, 2, TEXT)
+
+        legend_y = MARGIN + HEADER_H + GRID_H + GAP + PTT_H + MARGIN
         for i, line in enumerate(LEGEND_LINES):
             draw_text(screen, line, MARGIN, legend_y + i * 16, 1, LEGEND_TEXT)
 
         pygame.display.flip()
         pygame.time.wait(16)
 
-    if mouse_down_key is not None:
-        send("KEYUP", mouse_down_key)
-    sock.close()
+    # Flush anything still logically "held" (a deferred min-hold release that
+    # hadn't fired yet, or a mouse button down when the window closed) so we
+    # don't leave a key stuck pressed in the emulator after this exits.
+    for key_name in set(active_keys) | set(pending_release):
+        send_action(key_name, False)
+    kb_sock.close()
+    ptt_sock.close()
     pygame.quit()
 
 

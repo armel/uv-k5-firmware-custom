@@ -11,7 +11,8 @@
 #   --eeprom PATH     EEPROM persistence file (default: emulator/.generated/eeprom.bin)
 #   --monitor-port N  Renode monitor port (default: 8888)
 #   --keyboard-port N Keyboard bridge socket port (default: 9812)
-#   --no-keyboard     Start Renode + viewer only (view-only, no keypress injection)
+#   --ptt-port N      PTT bridge socket port (default: 9813)
+#   --no-keyboard     Start Renode + viewer only (view-only, no keypress/PTT injection)
 #   --test            Run emulator/tests/smoke_boot.robot against this .elf and exit
 #                      (no viewer/keyboard, no long-running processes)
 #
@@ -25,7 +26,7 @@ GENERATED_DIR="$EMU_DIR/.generated"
 mkdir -p "$GENERATED_DIR"
 
 usage() {
-    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1
 }
 
@@ -46,6 +47,7 @@ fi
 EEPROM_FILE="$GENERATED_DIR/eeprom.bin"
 MONITOR_PORT=8888
 KEYBOARD_PORT=9812
+PTT_PORT=9813
 WITH_KEYBOARD=1
 TEST_ONLY=0
 
@@ -54,6 +56,7 @@ while [ $# -gt 0 ]; do
         --eeprom) EEPROM_FILE="$2"; shift 2 ;;
         --monitor-port) MONITOR_PORT="$2"; shift 2 ;;
         --keyboard-port) KEYBOARD_PORT="$2"; shift 2 ;;
+        --ptt-port) PTT_PORT="$2"; shift 2 ;;
         --no-keyboard) WITH_KEYBOARD=0; shift ;;
         --test) TEST_ONLY=1; shift ;;
         -h|--help) usage ;;
@@ -125,7 +128,7 @@ trap cleanup EXIT INT TERM
 
 RENODE_LOG="$GENERATED_DIR/renode.log"
 echo "Starting Renode (log: $RENODE_LOG)..."
-UVK5_KEYBOARD_PORT="$KEYBOARD_PORT" UVK5_MONITOR_PORT="$MONITOR_PORT" \
+UVK5_KEYBOARD_PORT="$KEYBOARD_PORT" UVK5_PTT_PORT="$PTT_PORT" UVK5_MONITOR_PORT="$MONITOR_PORT" \
     "$SCRIPT_DIR/run.sh" "$FIRMWARE_ELF" "$EEPROM_FILE" > "$RENODE_LOG" 2>&1 &
 PIDS+=($!)
 
@@ -149,9 +152,9 @@ python3 "$EMU_DIR/host_tools/display_viewer.py" --elf "$FIRMWARE_ELF" --monitor-
 PIDS+=($!)
 
 if [ "$WITH_KEYBOARD" = "1" ]; then
-    echo "Starting keyboard bridge on port $KEYBOARD_PORT..."
+    echo "Starting keyboard bridge on port $KEYBOARD_PORT (PTT on $PTT_PORT)..."
     echo "(click the keyboard bridge window, then type -- see its on-screen help)"
-    python3 "$EMU_DIR/host_tools/keyboard_bridge.py" --port "$KEYBOARD_PORT" &
+    python3 "$EMU_DIR/host_tools/keyboard_bridge.py" --port "$KEYBOARD_PORT" --ptt-port "$PTT_PORT" &
     PIDS+=($!)
 fi
 

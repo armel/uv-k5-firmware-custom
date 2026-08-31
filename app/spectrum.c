@@ -348,8 +348,15 @@ static void ToggleAFDAC(bool on)
     BK4819_WriteRegister(BK4819_REG_30, Reg);
 }
 
+static uint32_t NormalizeScanFrequency(uint32_t f)
+{
+    const uint16_t step = scanStepValues[settings.scanStepIndex];
+    return (step == 833) ? FREQUENCY_RoundToStep(f, step) : f;
+}
+
 static void SetF(uint32_t f)
 {
+    f = NormalizeScanFrequency(f);
     fMeasure = f;
 
     BK4819_SetFrequency(fMeasure);
@@ -580,7 +587,7 @@ static void UpdateScanInfo()
     if (scanInfo.rssi > scanInfo.rssiMax)
     {
         scanInfo.rssiMax = scanInfo.rssi;
-        scanInfo.fPeak = scanInfo.f;
+        scanInfo.fPeak = NormalizeScanFrequency(scanInfo.f);
         scanInfo.iPeak = scanInfo.i;
     }
 
@@ -1038,7 +1045,8 @@ static void DrawStatus()
 static void ShowChannelName(uint32_t f)
 {
     static uint32_t channelF = 0;
-    static char channelName[12]; 
+    static char channelName[12];
+    f = NormalizeScanFrequency(f);
 
     if (isListening)
     {
@@ -1072,6 +1080,7 @@ static void ShowChannelName(uint32_t f)
 
 static void DrawF(uint32_t f)
 {
+    f = NormalizeScanFrequency(f);
     sprintf(String, "%u.%05u", f / 100000, f % 100000);
     UI_PrintStringSmallNormal(String, 8, 127, 0);
 

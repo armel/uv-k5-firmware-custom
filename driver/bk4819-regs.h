@@ -74,6 +74,9 @@ enum BK4819_REGISTER_t {
     BK4819_REG_3D = 0x3DU,
     BK4819_REG_3E = 0x3EU,
     BK4819_REG_3F = 0x3FU,
+    // REG_40<12> 1; Enable RF Tx deviation
+    // REG_40<11:0> 0x4D0; RF Tx deviation tuning, 0 = min, 0xFFF = max
+    BK4819_REG_40 = 0x40U,
     BK4819_REG_43 = 0x43U,
     BK4819_REG_46 = 0x46U,
     BK4819_REG_47 = 0x47U,
@@ -97,6 +100,8 @@ enum BK4819_REGISTER_t {
     BK4819_REG_5B = 0x5BU,
     BK4819_REG_5C = 0x5CU,
     BK4819_REG_5D = 0x5DU,
+    // REG_5E<9:3> FSK Tx FIFO almost empty threshold, <2:0> Rx FIFO almost full
+    BK4819_REG_5E = 0x5EU,
     BK4819_REG_5F = 0x5FU,
     BK4819_REG_63 = 0x63U,
     BK4819_REG_64 = 0x64U,

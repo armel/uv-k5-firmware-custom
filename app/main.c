@@ -25,6 +25,9 @@
 #endif
 #include "app/generic.h"
 #include "app/main.h"
+#ifdef ENABLE_POCSAG
+    #include "app/pocsag_ui.h"
+#endif
 #include "app/scanner.h"
 
 #ifdef ENABLE_SPECTRUM
@@ -112,6 +115,9 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
         case KEY_0:
             #ifdef ENABLE_FMRADIO
                 ACTION_FM();
+            #elif defined(ENABLE_POCSAG)
+                APP_RunPocsag();
+                gRequestDisplayScreen = DISPLAY_MAIN;
             #endif
             break;
 

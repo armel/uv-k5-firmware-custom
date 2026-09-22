@@ -336,6 +336,9 @@ void Main(void)
     */
 
     #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
+        // The range variables only exist when ENABLE_SCAN_RANGES is on, so restoring a
+        // range on boot needs its own guard rather than riding on the resume-state one.
+        #ifdef ENABLE_SCAN_RANGES
         if (gEeprom.CURRENT_STATE == 2 || gEeprom.CURRENT_STATE == 5) {
             gScanRangeStart = gScanRangeStart ? 0 : gTxVfo->pRX->Frequency;
             gScanRangeStop = gEeprom.VfoInfo[!gEeprom.TX_VFO].freq_config_RX.Frequency;
@@ -343,6 +346,7 @@ void Main(void)
                 SWAP(gScanRangeStart, gScanRangeStop);
             }
         }
+        #endif
 
         if (gEeprom.CURRENT_STATE == 1) {
             gEeprom.SCAN_LIST_DEFAULT = gEeprom.CURRENT_LIST;

@@ -52,8 +52,13 @@ static void ACTION_Scan_FM(bool bRestart);
 
 #if defined(ENABLE_ALARM) || defined(ENABLE_TX1750)
 static void ACTION_AlarmOr1750(bool b1750);
+#endif
+// Guarded individually, because each is only referenced under its own option.
+#ifdef ENABLE_ALARM
 inline static void ACTION_Alarm() { ACTION_AlarmOr1750(false); }
-inline static void ACTION_1750() { ACTION_AlarmOr1750(true); };
+#endif
+#ifdef ENABLE_TX1750
+inline static void ACTION_1750() { ACTION_AlarmOr1750(true); }
 #endif
 
 inline static void ACTION_ScanRestart() { ACTION_Scan(true); };
@@ -242,6 +247,11 @@ void ACTION_Scan(bool bRestart)
         gScheduleScanListen    = false;
     } else {
         #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
+        /* gScanRangeStart is only declared when ENABLE_SCAN_RANGES is on, so this
+         * needs its own guard rather than riding on the resume-state one: with scan
+         * ranges off the build failed here on an undeclared identifier. Without them
+         * there is no range to be in, so the state is always the plain one. */
+        #ifdef ENABLE_SCAN_RANGES
         if(gScanRangeStart == 0) // No ScanRange
         {
             gEeprom.CURRENT_STATE = 1;
@@ -250,6 +260,9 @@ void ACTION_Scan(bool bRestart)
         {
             gEeprom.CURRENT_STATE = 2;
         }
+        #else
+        gEeprom.CURRENT_STATE = 1;
+        #endif
         SETTINGS_WriteCurrentState();
         #endif
         // start scanning
@@ -495,43 +508,36 @@ void ACTION_Update(void)
 
 void ACTION_RxMode(void)
 {
-    static bool cycle = 0;
+    static bool cycle = false;
 
-    switch(cycle) {
-        case 0:
-            gEeprom.DUAL_WATCH = !gEeprom.DUAL_WATCH;
-            cycle = 1;
-            break;
-        case 1:
-            gEeprom.CROSS_BAND_RX_TX = !gEeprom.CROSS_BAND_RX_TX;
-            cycle = 0;
-            break;
-    }
+    if (!cycle)
+        gEeprom.DUAL_WATCH = !gEeprom.DUAL_WATCH;
+    else
+        gEeprom.CROSS_BAND_RX_TX = !gEeprom.CROSS_BAND_RX_TX;
+
+    cycle = !cycle;
 
     ACTION_Update();
 }
 
 void ACTION_MainOnly(void)
 {
-    static bool cycle = 0;
+    static bool cycle = false;
     static uint8_t dw = 0;
     static uint8_t cb = 0;
 
-    switch(cycle) {
-        case 0:
-            dw = gEeprom.DUAL_WATCH;
-            cb = gEeprom.CROSS_BAND_RX_TX;
+    if (!cycle) {
+        dw = gEeprom.DUAL_WATCH;
+        cb = gEeprom.CROSS_BAND_RX_TX;
 
-            gEeprom.DUAL_WATCH = 0;
-            gEeprom.CROSS_BAND_RX_TX = 0;
-            cycle = 1;
-            break;
-        case 1:
-            gEeprom.DUAL_WATCH = dw;
-            gEeprom.CROSS_BAND_RX_TX = cb;
-            cycle = 0;
-            break;
+        gEeprom.DUAL_WATCH = 0;
+        gEeprom.CROSS_BAND_RX_TX = 0;
+    } else {
+        gEeprom.DUAL_WATCH = dw;
+        gEeprom.CROSS_BAND_RX_TX = cb;
     }
+
+    cycle = !cycle;
 
     ACTION_Update();
 }

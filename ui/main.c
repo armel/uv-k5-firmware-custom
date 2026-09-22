@@ -884,11 +884,16 @@ void UI_DisplayMain(void)
                 uint8_t countList = 0;
                 uint8_t shiftList = 0;
 
+                /* Hoisted out of the block below, where it used to be declared: the
+                 * compander symbol further down also reads it, and only in the
+                 * !ENABLE_BIG_FREQ branch - so building without big frequencies failed
+                 * to compile on an undeclared 'att'. */
+                const ChannelAttributes_t att =
+                    gMR_ChannelAttributes[gEeprom.ScreenChannel[vfo_num]];
+
                 if(gMR_ChannelExclude[gEeprom.ScreenChannel[vfo_num]] == false)
                 {
                     // show the scan list assigment symbols
-                    const ChannelAttributes_t att = gMR_ChannelAttributes[gEeprom.ScreenChannel[vfo_num]];
-
                     countList = att.scanlist1 + att.scanlist2 + att.scanlist3;
 
                     if(countList == 0)

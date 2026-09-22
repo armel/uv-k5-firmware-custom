@@ -1,0 +1,7 @@
+# host build artifacts
+pocsag_wav
+hwfsk_test
+rx_test
+*.wav
+*.d
+__pycache__/

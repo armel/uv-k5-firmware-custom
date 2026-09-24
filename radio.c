@@ -15,6 +15,7 @@
  */
 
 #include "driver/bk4819-regs.h"
+#include <stddef.h>
 #include <string.h>
 
 #include "am_fix.h"
@@ -157,6 +158,31 @@ void RADIO_InitInfo(VFO_Info_t *pInfo, const uint8_t ChannelSave, const uint32_t
     RADIO_ConfigureSquelchAndOutputPower(pInfo);
 }
 
+// Validate a code type / code pair read from EEPROM (shared by RX and TX)
+static void __attribute__((noinline)) RADIO_ValidateCode(FREQ_Config_t *pConfig, uint8_t tmp)
+{
+    switch (pConfig->CodeType)
+    {
+        default:
+        case CODE_TYPE_OFF:
+            pConfig->CodeType = CODE_TYPE_OFF;
+            tmp = 0;
+            break;
+
+        case CODE_TYPE_CONTINUOUS_TONE:
+            if (tmp > (ARRAY_SIZE(CTCSS_Options) - 1))
+                tmp = 0;
+            break;
+
+        case CODE_TYPE_DIGITAL:
+        case CODE_TYPE_REVERSE_DIGITAL:
+            if (tmp > (ARRAY_SIZE(DCS_Options) - 1))
+                tmp = 0;
+            break;
+    }
+    pConfig->Code = tmp;
+}
+
 void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure)
 {
     VFO_Info_t *pVfo = &gEeprom.VfoInfo[VFO];
@@ -283,49 +309,9 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
         pVfo->freq_config_RX.CodeType = (data[2] >> 0) & 0x0F;
         pVfo->freq_config_TX.CodeType = (data[2] >> 4) & 0x0F;
 
-        tmp = data[0];
-        switch (pVfo->freq_config_RX.CodeType)
-        {
-            default:
-            case CODE_TYPE_OFF:
-                pVfo->freq_config_RX.CodeType = CODE_TYPE_OFF;
-                tmp = 0;
-                break;
+        RADIO_ValidateCode(&pVfo->freq_config_RX, data[0]);
 
-            case CODE_TYPE_CONTINUOUS_TONE:
-                if (tmp > (ARRAY_SIZE(CTCSS_Options) - 1))
-                    tmp = 0;
-                break;
-
-            case CODE_TYPE_DIGITAL:
-            case CODE_TYPE_REVERSE_DIGITAL:
-                if (tmp > (ARRAY_SIZE(DCS_Options) - 1))
-                    tmp = 0;
-                break;
-        }
-        pVfo->freq_config_RX.Code = tmp;
-
-        tmp = data[1];
-        switch (pVfo->freq_config_TX.CodeType)
-        {
-            default:
-            case CODE_TYPE_OFF:
-                pVfo->freq_config_TX.CodeType = CODE_TYPE_OFF;
-                tmp = 0;
-                break;
-
-            case CODE_TYPE_CONTINUOUS_TONE:
-                if (tmp > (ARRAY_SIZE(CTCSS_Options) - 1))
-                    tmp = 0;
-                break;
-
-            case CODE_TYPE_DIGITAL:
-            case CODE_TYPE_REVERSE_DIGITAL:
-                if (tmp > (ARRAY_SIZE(DCS_Options) - 1))
-                    tmp = 0;
-                break;
-        }
-        pVfo->freq_config_TX.Code = tmp;
+        RADIO_ValidateCode(&pVfo->freq_config_TX, data[1]);
 
         if (data[4] == 0xFF)
         {
@@ -466,14 +452,17 @@ void RADIO_ConfigureSquelchAndOutputPower(VFO_Info_t *pInfo)
     {   // squelch >= 1
         Base += gEeprom.SQUELCH_LEVEL;                                        // my eeprom squelch-1
                                                                               // VHF   UHF
-        EEPROM_ReadBuffer(Base + 0x00, &pInfo->SquelchOpenRSSIThresh,    1);  //  50    10
-        EEPROM_ReadBuffer(Base + 0x10, &pInfo->SquelchCloseRSSIThresh,   1);  //  40     5
-
-        EEPROM_ReadBuffer(Base + 0x20, &pInfo->SquelchOpenNoiseThresh,   1);  //  65    90
-        EEPROM_ReadBuffer(Base + 0x30, &pInfo->SquelchCloseNoiseThresh,  1);  //  70   100
-
-        EEPROM_ReadBuffer(Base + 0x40, &pInfo->SquelchCloseGlitchThresh, 1);  //  90    90
-        EEPROM_ReadBuffer(Base + 0x50, &pInfo->SquelchOpenGlitchThresh,  1);  // 100   100
+        // one byte every 0x10 from Base, in this order              //  VHF   UHF
+        static const uint8_t sqlField[6] = {
+            offsetof(VFO_Info_t, SquelchOpenRSSIThresh),                //  50    10
+            offsetof(VFO_Info_t, SquelchCloseRSSIThresh),               //  40     5
+            offsetof(VFO_Info_t, SquelchOpenNoiseThresh),               //  65    90
+            offsetof(VFO_Info_t, SquelchCloseNoiseThresh),              //  70   100
+            offsetof(VFO_Info_t, SquelchCloseGlitchThresh),             //  90    90
+            offsetof(VFO_Info_t, SquelchOpenGlitchThresh),              // 100   100
+        };
+        for (unsigned int i = 0; i < 6; i++)
+            EEPROM_ReadBuffer(Base + (i * 0x10), (uint8_t *)pInfo + sqlField[i], 1);
 
 
         uint16_t noise_open   = pInfo->SquelchOpenNoiseThresh;
@@ -682,9 +671,11 @@ void RADIO_SelectVfos(void)
     RADIO_SelectCurrentVfo();
 }
 
-void RADIO_SetupRegisters(bool switchToForeground)
+// Common start of RADIO_SetupRegisters() and RADIO_SetTxParameters():
+// audio path off, speaker flag off, one GPIO off, then the channel filter bandwidth
+static void RADIO_AudioOffAndSetBandwidth(const VFO_Info_t *pVfo, BK4819_GPIO_PIN_t Pin)
 {
-    BK4819_FilterBandwidth_t Bandwidth = gRxVfo->CHANNEL_BANDWIDTH;
+    BK4819_FilterBandwidth_t Bandwidth = pVfo->CHANNEL_BANDWIDTH;
 
     #ifdef ENABLE_FEAT_F4HWN_NARROWER
         if(Bandwidth == BK4819_FILTER_BW_NARROW && gSetting_set_nfm == 1)
@@ -697,7 +688,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
     gEnableSpeaker = false;
 
-    BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
+    BK4819_ToggleGpioOut(Pin, false);
 
     switch (Bandwidth)
     {
@@ -708,13 +699,17 @@ void RADIO_SetupRegisters(bool switchToForeground)
         case BK4819_FILTER_BW_NARROW:
         case BK4819_FILTER_BW_NARROWER:
             #ifdef ENABLE_AM_FIX
-//              BK4819_SetFilterBandwidth(Bandwidth, gRxVfo->Modulation == MODULATION_AM && gSetting_AM_fix);
                 BK4819_SetFilterBandwidth(Bandwidth, true);
             #else
                 BK4819_SetFilterBandwidth(Bandwidth, false);
             #endif
             break;
     }
+}
+
+void RADIO_SetupRegisters(bool switchToForeground)
+{
+    RADIO_AudioOffAndSetBandwidth(gRxVfo, BK4819_GPIO6_PIN2_GREEN);
 
     BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, false);
 
@@ -921,37 +916,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
 void RADIO_SetTxParameters(void)
 {
-    BK4819_FilterBandwidth_t Bandwidth = gCurrentVfo->CHANNEL_BANDWIDTH;
-
-    #ifdef ENABLE_FEAT_F4HWN_NARROWER
-        if(Bandwidth == BK4819_FILTER_BW_NARROW && gSetting_set_nfm == 1)
-        {
-            Bandwidth = BK4819_FILTER_BW_NARROWER;
-        }
-    #endif
-
-    AUDIO_AudioPathOff();
-
-    gEnableSpeaker = false;
-
-    BK4819_ToggleGpioOut(BK4819_GPIO0_PIN28_RX_ENABLE, false);
-
-    switch (Bandwidth)
-    {
-        default:
-            Bandwidth = BK4819_FILTER_BW_WIDE;
-            [[fallthrough]];
-        case BK4819_FILTER_BW_WIDE:
-        case BK4819_FILTER_BW_NARROW:
-        case BK4819_FILTER_BW_NARROWER:
-            #ifdef ENABLE_AM_FIX
-//              BK4819_SetFilterBandwidth(Bandwidth, gCurrentVfo->Modulation == MODULATION_AM && gSetting_AM_fix);
-                BK4819_SetFilterBandwidth(Bandwidth, true);
-            #else
-                BK4819_SetFilterBandwidth(Bandwidth, false);
-            #endif
-            break;
-    }
+    RADIO_AudioOffAndSetBandwidth(gCurrentVfo, BK4819_GPIO0_PIN28_RX_ENABLE);
 
     BK4819_SetFrequency(gCurrentVfo->pTX->Frequency);
 

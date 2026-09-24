@@ -104,6 +104,10 @@ void CHFRSCANNER_ContinueScanning(void)
 
 void CHFRSCANNER_ContinueScanning(void)
 {
+    // clear before stepping: the step may set a pause as short as 1 tick, and
+    // clearing afterwards could erase the flag that pause already raised
+    gScheduleScanListen = false;
+
     if (gCurrentFunction == FUNCTION_INCOMING &&
         (IS_FREQ_CHANNEL(gNextMrChannel) || gCurrentCodeType == CODE_TYPE_OFF))
     {
@@ -116,7 +120,6 @@ void CHFRSCANNER_ContinueScanning(void)
 
     gScanPauseMode      = false;
     gRxReceptionMode    = RX_MODE_NONE;
-    gScheduleScanListen = false;
 }
 
 void CHFRSCANNER_Found(void)

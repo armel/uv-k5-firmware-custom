@@ -544,35 +544,23 @@ void ACTION_Ptt(void)
 void ACTION_Wn(void)
 {
     #ifdef ENABLE_FEAT_F4HWN_NARROWER
+        // RX: toggle the RX VFO bandwidth (with the optional narrower filter)
+        // otherwise: toggle the TX VFO bandwidth (narrower filter not applied)
+        const bool isRx = FUNCTION_IsRx();
+        VFO_Info_t *pVfo = isRx ? gRxVfo : gTxVfo;
         bool narrower = 0;
-        if (FUNCTION_IsRx())
-        {
-            gRxVfo->CHANNEL_BANDWIDTH = (gRxVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
-            if(gRxVfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1)
-            {
-                narrower = 1;
-            }
 
-            #ifdef ENABLE_AM_FIX
-                BK4819_SetFilterBandwidth(gRxVfo->CHANNEL_BANDWIDTH + narrower, true);
-            #else
-                BK4819_SetFilterBandwidth(gRxVfo->CHANNEL_BANDWIDTH + narrower, false);
-            #endif
-        }
-        else
+        pVfo->CHANNEL_BANDWIDTH = (pVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
+        if(isRx && pVfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1)
         {
-            gTxVfo->CHANNEL_BANDWIDTH = (gTxVfo->CHANNEL_BANDWIDTH == 0) ? 1: 0;
-            if(gTxVfo->CHANNEL_BANDWIDTH == BANDWIDTH_NARROW && gSetting_set_nfm == 1)
-            {
-                narrower = 1;
-            }
-
-            #ifdef ENABLE_AM_FIX
-                BK4819_SetFilterBandwidth(gTxVfo->CHANNEL_BANDWIDTH, true);
-            #else
-                BK4819_SetFilterBandwidth(gTxVfo->CHANNEL_BANDWIDTH, false);
-            #endif
+            narrower = 1;
         }
+
+        #ifdef ENABLE_AM_FIX
+            BK4819_SetFilterBandwidth(pVfo->CHANNEL_BANDWIDTH + narrower, true);
+        #else
+            BK4819_SetFilterBandwidth(pVfo->CHANNEL_BANDWIDTH + narrower, false);
+        #endif
     #else
         if (FUNCTION_IsRx())
         {

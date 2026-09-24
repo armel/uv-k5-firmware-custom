@@ -243,6 +243,12 @@ int FM_CheckFrequencyLock(uint16_t Frequency, uint16_t LowerLimit)
     return ret;
 }
 
+static void FM_SetFrequencyAndSave(void)
+{
+    BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
+    gRequestSaveFM = true;
+}
+
 static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 {
     enum { STATE_FREQ_MODE, STATE_MR_MODE, STATE_SAVE };
@@ -296,8 +302,7 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
                 gAnotherVoiceID = (VOICE_ID_t)Key;
 #endif
                 gEeprom.FM_FrequencyPlaying = gEeprom.FM_SelectedFrequency;
-                BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
-                gRequestSaveFM = true;
+                FM_SetFrequencyAndSave();
                 return;
             }
         }
@@ -314,8 +319,7 @@ static void Key_DIGITS(KEY_Code_t Key, uint8_t state)
 #endif
                     gEeprom.FM_SelectedChannel = Channel;
                     gEeprom.FM_FrequencyPlaying = gFM_Channels[Channel];
-                    BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
-                    gRequestSaveFM = true;
+                    FM_SetFrequencyAndSave();
                     return;
                 }
             }
@@ -370,8 +374,7 @@ static void Key_FUNC(KEY_Code_t Key, uint8_t state)
                 gEeprom.FM_IsMrMode = !gEeprom.FM_IsMrMode;
 
                 if (!FM_ConfigureChannelState()) {
-                    BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
-                    gRequestSaveFM = true;
+                    FM_SetFrequencyAndSave();
                 }
                 else
                     gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
@@ -453,28 +456,19 @@ static void Key_MENU(uint8_t state)
     gRequestDisplayScreen = DISPLAY_FM;
     gBeepToPlay           = BEEP_1KHZ_60MS_OPTIONAL;
 
-    if (gFM_ScanState == FM_SCAN_OFF) {
-        if (!gEeprom.FM_IsMrMode) {
-            if (gAskToSave) {
-                gFM_Channels[gFM_ChannelPosition] = gEeprom.FM_FrequencyPlaying;
-                gRequestSaveFM = true;
-            }
-            gAskToSave = !gAskToSave;
-        }
-        else {
+    if (gFM_ScanState == FM_SCAN_OFF && gEeprom.FM_IsMrMode) {
+        {
             if (gAskToDelete) {
                 gFM_Channels[gEeprom.FM_SelectedChannel] = 0xFFFF;
 
                 FM_ConfigureChannelState();
-                BK1080_SetFrequency(gEeprom.FM_FrequencyPlaying, gEeprom.FM_Band/*, gEeprom.FM_Space*/);
-
-                gRequestSaveFM = true;
+                FM_SetFrequencyAndSave();
             }
             gAskToDelete = !gAskToDelete;
         }
     }
     else {
-        if (gFM_AutoScan || !gFM_FoundFrequency) {
+        if (gFM_ScanState != FM_SCAN_OFF && (gFM_AutoScan || !gFM_FoundFrequency)) {
             gBeepToPlay    = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
             gInputBoxIndex = 0;
             return;

@@ -493,6 +493,19 @@ char    edit_original[17]; // a copy of the text before editing so that we can e
 char    edit[17];
 int     edit_index;
 
+static void FormatMinSec(char *pString, int seconds)
+{
+    sprintf(pString, "%02dm:%02ds", seconds / 60, seconds % 60);
+}
+
+// show the frequency of channel gSubMenuSelection in the menu value area
+static void PrintChannelFrequency(char *pString, unsigned int line)
+{
+    const uint32_t frequency = SETTINGS_FetchChannelFrequency(gSubMenuSelection);
+    sprintf(pString, "%u.%05u", frequency / 100000, frequency % 100000);
+    UI_PrintString(pString, (8 * 6) + 2, LCD_WIDTH - 1, line, 8);
+}
+
 void UI_DisplayMenu(void)
 {
     const unsigned int menu_list_width = 6; // max no. of characters on the menu list (left side)
@@ -724,7 +737,7 @@ void UI_DisplayMenu(void)
             }
             else if(gSubMenuSelection < 61)
             {
-                sprintf(String, "%02dm:%02ds", (((gSubMenuSelection) * 5) / 60), (((gSubMenuSelection) * 5) % 60));
+                FormatMinSec(String, gSubMenuSelection * 5);
                 #if !defined(ENABLE_SPECTRUM) || !defined(ENABLE_FMRADIO)
                 //ST7565_Gauge(4, 1, 60, gSubMenuSelection);
                 gaugeLine = 4;
@@ -761,7 +774,7 @@ void UI_DisplayMenu(void)
                 strcpy(String, gSubMenu_OFF_ON[0]);
             else
             {
-                sprintf(String, "%02dm:%02ds", ((gSubMenuSelection * 15) / 60), ((gSubMenuSelection * 15) % 60));
+                FormatMinSec(String, gSubMenuSelection * 15);
                 #if !defined(ENABLE_SPECTRUM) || !defined(ENABLE_FMRADIO)
                 //ST7565_Gauge(4, 1, 40, gSubMenuSelection);
                 gaugeLine = 4;
@@ -821,9 +834,7 @@ void UI_DisplayMenu(void)
 
             if (valid && !gAskForConfirmation)
             {   // show the frequency so that the user knows the channels frequency
-                const uint32_t frequency = SETTINGS_FetchChannelFrequency(gSubMenuSelection);
-                sprintf(String, "%u.%05u", frequency / 100000, frequency % 100000);
-                UI_PrintString(String, menu_item_x1, menu_item_x2, 4, 8);
+                PrintChannelFrequency(String, 4);
             }
 
             SETTINGS_FetchChannelName(String, gSubMenuSelection);
@@ -841,8 +852,6 @@ void UI_DisplayMenu(void)
 
             if (valid)
             {
-                const uint32_t frequency = SETTINGS_FetchChannelFrequency(gSubMenuSelection);
-
                 //if (!gIsInSubMenu || edit_index < 0)
                 if (!gIsInSubMenu)
                     edit_index = -1;
@@ -863,8 +872,7 @@ void UI_DisplayMenu(void)
 
                 if (!gAskForConfirmation)
                 {   // show the frequency so that the user knows the channels frequency
-                    sprintf(String, "%u.%05u", frequency / 100000, frequency % 100000);
-                    UI_PrintString(String, menu_item_x1, menu_item_x2, 4 + (gIsInSubMenu && edit_index >= 0), 8);
+                    PrintChannelFrequency(String, 4 + (gIsInSubMenu && edit_index >= 0));
                 }
             }
 
@@ -881,7 +889,7 @@ void UI_DisplayMenu(void)
             break;
 
         case MENU_TOT:
-            sprintf(String, "%02dm:%02ds", (((gSubMenuSelection + 1) * 5) / 60), (((gSubMenuSelection + 1) * 5) % 60));
+            FormatMinSec(String, (gSubMenuSelection + 1) * 5);
             #if !defined(ENABLE_SPECTRUM) || !defined(ENABLE_FMRADIO)
             //ST7565_Gauge(4, 5, 179, gSubMenuSelection);
             gaugeLine = 4;
@@ -913,7 +921,8 @@ void UI_DisplayMenu(void)
             }
             else
             {
-                sprintf(String, "TIMEOUT\n%02dm:%02ds", (((gSubMenuSelection - 80) * 5) / 60), (((gSubMenuSelection - 80) * 5) % 60));
+                strcpy(String, "TIMEOUT\n");
+                FormatMinSec(String + 8, (gSubMenuSelection - 80) * 5);
                 #if !defined(ENABLE_SPECTRUM) || !defined(ENABLE_FMRADIO)
                 //ST7565_Gauge(5, 80, 104, gSubMenuSelection);
                 gaugeLine = 5;
@@ -1221,10 +1230,7 @@ void UI_DisplayMenu(void)
             // only for SysInf
             if(UI_MENU_GetCurrentMenuId() == MENU_VOL)
             {
-                sprintf(edit, "%u.%02uV %u%%",
-                    gBatteryVoltageAverage / 100, gBatteryVoltageAverage % 100,
-                    BATTERY_VoltsToPercent(gBatteryVoltageAverage)
-                );
+                UI_FormatBatteryString(edit);
 
                 UI_PrintStringSmallNormal(edit, 54, 127, 1);
 

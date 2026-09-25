@@ -20,6 +20,12 @@ void CHFRSCANNER_Stop(void);
 void CHFRSCANNER_Start(const bool storeBackupSettings, const int8_t scan_direction);
 void CHFRSCANNER_ContinueScanning(void);
 
+#ifdef ENABLE_FEAT_FAST_SCAN
+// true while the chip is in the quick-scan state (squelch interrupts off, retuned
+// behind gRxVfo's back); RADIO_SetupRegisters() clears it
+extern bool              gFastScanOwnsChip;
+#endif
+
 #ifdef ENABLE_FEAT_F4HWN
     extern uint32_t lastFoundFrqOrChan;
     extern uint32_t lastFoundFrqOrChanOld;

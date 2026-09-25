@@ -1832,6 +1832,15 @@ static void ALARM_Off(void)
 }
 #endif
 
+static void SaveCurrentChannel(uint8_t mode)
+{
+    SETTINGS_SaveChannel(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, gTxVfo, mode);
+
+    if (!SCANNER_IsScanning() && gVfoConfigureMode == VFO_CONFIGURE_NONE)
+        // gVfoConfigureMode is so as we don't wipe out previously setting this variable elsewhere
+        gVfoConfigureMode = VFO_CONFIGURE;
+}
+
 static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 {
     #ifdef ENABLE_FEAT_F4HWN_SLEEP
@@ -1887,12 +1896,9 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 #endif
 
         if (flagSaveChannel) {
-            SETTINGS_SaveChannel(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, gTxVfo, flagSaveChannel);
+            const uint8_t mode = flagSaveChannel;
             flagSaveChannel = false;
-
-            if (!SCANNER_IsScanning() && gVfoConfigureMode == VFO_CONFIGURE_NONE)
-                // gVfoConfigureMode is so as we don't wipe out previously setting this variable elsewhere
-                gVfoConfigureMode = VFO_CONFIGURE;
+            SaveCurrentChannel(mode);
         }
     }
     else { // key pressed or held
@@ -2108,10 +2114,7 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 #endif
     }
 #ifdef ENABLE_FEAT_F4HWN // For F + SIDE1 or F + SIDE2
-    else if (gWasFKeyPressed && (Key == KEY_SIDE1 || Key == KEY_SIDE2)) {
-        ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
-    }
-    else if (Key != KEY_SIDE1 && Key != KEY_SIDE2 && gScreenToDisplay != DISPLAY_INVALID) {
+    else if ((Key == KEY_SIDE1 || Key == KEY_SIDE2) ? gWasFKeyPressed : (gScreenToDisplay != DISPLAY_INVALID)) {
         ProcessKeysFunctions[gScreenToDisplay](Key, bKeyPressed, bKeyHeld);
     }
 #else
@@ -2175,11 +2178,7 @@ Skip:
     if (gRequestSaveChannel > 0) { // TODO: remove the gRequestSaveChannel, why use global variable for that??
         if ((!bKeyHeld && !bKeyPressed) || UI_MENU_GetCurrentMenuId())
         {
-            SETTINGS_SaveChannel(gTxVfo->CHANNEL_SAVE, gEeprom.TX_VFO, gTxVfo, gRequestSaveChannel);
-
-            if (!SCANNER_IsScanning() && gVfoConfigureMode == VFO_CONFIGURE_NONE)
-                // gVfoConfigureMode is so as we don't wipe out previously setting this variable elsewhere
-                gVfoConfigureMode = VFO_CONFIGURE;
+            SaveCurrentChannel(gRequestSaveChannel);
         }
         else { // this is probably so settings are not saved when up/down button is held and save is postponed to btn release
             flagSaveChannel = gRequestSaveChannel;

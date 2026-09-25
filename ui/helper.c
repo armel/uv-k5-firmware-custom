@@ -22,6 +22,7 @@
 #include "ui/helper.h"
 #include "ui/inputbox.h"
 #include "misc.h"
+#include "helper/battery.h"
 
 #ifndef ARRAY_SIZE
     #define ARRAY_SIZE(arr) (sizeof(arr)/sizeof((arr)[0]))
@@ -344,6 +345,13 @@ void UI_DisplayPopup(const char *string)
     // DrawRectangle(9,9, 118,38, true);
     UI_PrintString(string, 9, 118, 2, 8);
     UI_PrintStringSmallNormal("Press EXIT", 9, 118, 6);
+}
+
+void UI_FormatBatteryString(char *pString)
+{
+    sprintf(pString, "%u.%02uV %u%%",
+        gBatteryVoltageAverage / 100, gBatteryVoltageAverage % 100,
+        BATTERY_VoltsToPercent(gBatteryVoltageAverage));
 }
 
 void UI_DisplayClear()

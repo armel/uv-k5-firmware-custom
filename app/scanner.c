@@ -331,21 +331,20 @@ void SCANNER_Start(bool singleFreq)
         gScanCssState  = SCAN_CSS_STATE_SCANNING;
         gScanFrequency = gRxVfo->pRX->Frequency;
         stepSetting   = gRxVfo->STEP_SETTING;
-
-        BK4819_PickRXFilterPathBasedOnFrequency(gScanFrequency);
-        BK4819_SetScanFrequency(gScanFrequency);
-
-        gUpdateStatus = true;
     }
     else {
         gScanCssState  = SCAN_CSS_STATE_OFF;
         gScanFrequency = 0xFFFFFFFF;
+    }
 
-        BK4819_PickRXFilterPathBasedOnFrequency(gScanFrequency);
+    BK4819_PickRXFilterPathBasedOnFrequency(gScanFrequency);
+
+    if (gScanSingleFrequency)
+        BK4819_SetScanFrequency(gScanFrequency);
+    else
         BK4819_EnableFrequencyScan();
 
-        gUpdateStatus = true;
-    }
+    gUpdateStatus = true;
 
 #ifdef ENABLE_DTMF_CALLING
     DTMF_clear_RX();

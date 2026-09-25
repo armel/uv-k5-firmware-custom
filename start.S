@@ -129,116 +129,47 @@ GPIOC:
 
 	.section .text
 
+# All unused exceptions/interrupts share one endless loop (was one per vector)
 HandlerNMI:
-	b	.
-
 HandlerHardFault:
-	b	.
-
 HandlerSVCall:
-	b	.
-
 HandlerPendSV:
+HandlerWWDT:
+HandlerIWDT:
+HandlerRTC:
+HandlerDMA:
+HandlerSARADC:
+HandlerTIMER_BASE0:
+HandlerTIMER_BASE1:
+HandlerTIMER_PLUS0:
+HandlerTIMER_PLUS1:
+HandlerPWM_BASE0:
+HandlerPWM_BASE1:
+HandlerPWM_PLUS0:
+HandlerPWM_PLUS1:
+HandlerUART0:
+HandlerUART1:
+HandlerUART2:
+HandlerSPI0:
+HandlerSPI1:
+HandlerIIC0:
+HandlerIIC1:
+HandlerCMP:
+HandlerTIMER_BASE2:
+HandlerGPIOA5:
+HandlerGPIOA6:
+HandlerGPIOA7:
+HandlerGPIOB0:
+HandlerGPIOB1:
+HandlerGPIOC0:
+HandlerGPIOC1:
+HandlerGPIOA:
+HandlerGPIOB:
+HandlerGPIOC:
 	b	.
 
 SystickHandler:
 	bx	lr
-
-HandlerWWDT:
-	b	.
-
-HandlerIWDT:
-	b	.
-
-HandlerRTC:
-	b	.
-
-HandlerDMA:
-	b	.
-
-HandlerSARADC:
-	b	.
-
-HandlerTIMER_BASE0:
-	b	.
-
-HandlerTIMER_BASE1:
-	b	.
-
-HandlerTIMER_PLUS0:
-	b	.
-
-HandlerTIMER_PLUS1:
-	b	.
-
-HandlerPWM_BASE0:
-	b	.
-
-HandlerPWM_BASE1:
-	b	.
-
-HandlerPWM_PLUS0:
-	b	.
-
-HandlerPWM_PLUS1:
-	b	.
-
-HandlerUART0:
-	b	.
-
-HandlerUART1:
-	b	.
-
-HandlerUART2:
-	b	.
-
-HandlerSPI0:
-	b	.
-
-HandlerSPI1:
-	b	.
-
-HandlerIIC0:
-	b	.
-
-HandlerIIC1:
-	b	.
-
-HandlerCMP:
-	b	.
-
-HandlerTIMER_BASE2:
-	b	.
-
-HandlerGPIOA5:
-	b	.
-
-HandlerGPIOA6:
-	b	.
-
-HandlerGPIOA7:
-	b	.
-
-HandlerGPIOB0:
-	b	.
-
-HandlerGPIOB1:
-	b	.
-
-HandlerGPIOC0:
-	b	.
-
-HandlerGPIOC1:
-	b	.
-
-HandlerGPIOA:
-	b	.
-
-HandlerGPIOB:
-	b	.
-
-HandlerGPIOC:
-	b	.
 
 HandlerReset:
 	ldr	r0, =0x20003FF0

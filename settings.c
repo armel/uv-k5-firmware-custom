@@ -40,6 +40,17 @@ static const uint32_t gDefaultFrequencyTable[] =
 
 EEPROM_Config_t gEeprom = { 0 };
 
+// read a 16 byte DTMF code, fall back to the default if it is not valid
+static void LoadDtmfCode(const uint16_t address, uint8_t *Data, char *pCode, const char *pDefault)
+{
+    EEPROM_ReadBuffer(address, Data, 16);
+    if (DTMF_ValidateCodes((char *)Data, 16)) {
+        memcpy(pCode, Data, 16);
+    } else {
+        strcpy(pCode, pDefault);
+    }
+}
+
 void SETTINGS_InitEEPROM(void)
 {
     uint8_t Data[16] = {0};
@@ -228,20 +239,10 @@ void SETTINGS_InitEEPROM(void)
 #endif
 
     // 0EF8..0F07
-    EEPROM_ReadBuffer(0x0EF8, Data, sizeof(gEeprom.DTMF_UP_CODE));
-    if (DTMF_ValidateCodes((char *)Data, sizeof(gEeprom.DTMF_UP_CODE))) {
-        memcpy(gEeprom.DTMF_UP_CODE, Data, sizeof(gEeprom.DTMF_UP_CODE));
-    } else {
-        strcpy(gEeprom.DTMF_UP_CODE, "12345");
-    }
+    LoadDtmfCode(0x0EF8, Data, gEeprom.DTMF_UP_CODE, "12345");
 
     // 0F08..0F17
-    EEPROM_ReadBuffer(0x0F08, Data, sizeof(gEeprom.DTMF_DOWN_CODE));
-    if (DTMF_ValidateCodes((char *)Data, sizeof(gEeprom.DTMF_DOWN_CODE))) {
-        memcpy(gEeprom.DTMF_DOWN_CODE, Data, sizeof(gEeprom.DTMF_DOWN_CODE));
-    } else {
-        strcpy(gEeprom.DTMF_DOWN_CODE, "54321");
-    }
+    LoadDtmfCode(0x0F08, Data, gEeprom.DTMF_DOWN_CODE, "54321");
 
     // 0F18..0F1F
     EEPROM_ReadBuffer(0x0F18, Data, 8);

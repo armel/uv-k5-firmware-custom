@@ -78,10 +78,7 @@ void UI_DisplayWelcome(void)
         EEPROM_ReadBuffer(0x0EB0, WelcomeString0, 16);
         EEPROM_ReadBuffer(0x0EC0, WelcomeString1, 16);
 
-        sprintf(WelcomeString2, "%u.%02uV %u%%",
-                gBatteryVoltageAverage / 100,
-                gBatteryVoltageAverage % 100,
-                BATTERY_VoltsToPercent(gBatteryVoltageAverage));
+        UI_FormatBatteryString(WelcomeString2);
 
         if (gEeprom.POWER_ON_DISPLAY_MODE == POWER_ON_DISPLAY_MODE_VOLTAGE)
         {

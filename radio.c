@@ -36,6 +36,9 @@
 #include "radio.h"
 #include "settings.h"
 #include "ui/menu.h"
+#ifdef ENABLE_FEAT_FAST_SCAN
+    #include "app/chFrScanner.h"
+#endif
 
 VFO_Info_t    *gTxVfo;
 VFO_Info_t    *gRxVfo;
@@ -869,6 +872,10 @@ void RADIO_SetupRegisters(bool switchToForeground)
     BK4819_WriteRegister(BK4819_REG_3F, InterruptMask);
 
     FUNCTION_Init();
+
+#ifdef ENABLE_FEAT_FAST_SCAN
+    gFastScanOwnsChip = false;   // set up for gRxVfo again: the quick scan must take it over anew
+#endif
 
     if (switchToForeground)
         FUNCTION_Select(FUNCTION_FOREGROUND);

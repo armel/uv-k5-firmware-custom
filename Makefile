@@ -110,7 +110,9 @@ OBJS += init.o
 ifeq ($(ENABLE_OVERLAY),1)
 	OBJS += sram-overlay.o
 endif
-OBJS += external/printf/printf.o
+# Compact sprintf with the same output as printf.c for every conversion the
+# firmware uses; see the limitations at the top of printf_lite.c.
+OBJS += external/printf/printf_lite.o
 
 # Drivers
 OBJS += driver/adc.o

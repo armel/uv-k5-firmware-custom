@@ -297,6 +297,11 @@ endif
 
 ifeq ($(ENABLE_LTO),1)
 	CFLAGS += -flto=auto
+	# Size: optimise the whole program as one LTO partition with whole-program
+	# points-to analysis, and skip two code-motion passes that grow -Oz code.
+	# Passed to the link step too, where LTO code generation runs.
+	LTO_SIZE_FLAGS = -flto-partition=one -fipa-pta -fno-move-loop-invariants -fno-reorder-blocks -fmerge-all-constants
+	CFLAGS += $(LTO_SIZE_FLAGS)
 else
 	# We get most of the space savings if LTO creates problems
 	CFLAGS += -ffunction-sections -fdata-sections
@@ -511,6 +516,7 @@ LDFLAGS += -z noexecstack -mcpu=cortex-m0 -nostartfiles -Wl,-T,firmware.ld -Wl,-
 
 # Use newlib-nano instead of newlib
 LDFLAGS += --specs=nano.specs
+LDFLAGS += $(LTO_SIZE_FLAGS)
 
 ifeq ($(DEBUG),1)
 	ASFLAGS += -g
